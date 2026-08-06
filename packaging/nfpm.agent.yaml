@@ -1,0 +1,25 @@
+name: faroos-agent
+arch: ${GOARCH}
+platform: linux
+version: ${VERSION}
+section: admin
+priority: optional
+maintainer: FaroOS maintainers
+description: |-
+  FaroOS agent for managed nodes.
+  A working Docker installation is required, but no specific Docker package is mandated.
+vendor: FaroOS
+homepage: https://github.com/gonzalo/faroos
+license: AGPL-3.0
+contents:
+  - src: dist/faroos-agent
+    dst: /usr/local/bin/faroos-agent
+    file_info:
+      mode: 0755
+  - src: packaging/systemd/faroos-agent.service
+    dst: /lib/systemd/system/faroos-agent.service
+    file_info:
+      mode: 0644
+scripts:
+  postinstall: packaging/scripts/agent-postinstall.sh
+  postremove: packaging/scripts/agent-postremove.sh

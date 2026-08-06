@@ -1,35 +1,54 @@
-# Codex tasks
+# Codex tasks — install script + native packages
 
-Scope for this pass: **only** the placeholder route pages listed below, inside `web/src/routes/`. Do not touch `web/src/lib/`, `internal/`, `cmd/`, or the Dashboard (`+page.svelte` at the root route) — those are being worked on elsewhere in parallel.
+Scope: ONLY packaging/installation files. Do not touch `internal/`, `cmd/`, or `web/` — those are being actively edited elsewhere right now. Stay inside a new top-level `packaging/` directory plus edits to `.github/workflows/ci.yml` (append only, don't remove existing jobs) and `README.md` (add an "Installing" section, don't rewrite existing content).
 
 ## Context
 
-FaroOS is an open-source, self-hosted control panel for managing multiple servers (think CasaOS/ZimaOS but multi-server). Frontend is SvelteKit 5 (runes mode) + Tailwind v4, built as a static SPA served by a Go backend. The sidebar (`web/src/lib/components/Sidebar.svelte`) already links to these routes, but the pages don't exist yet, so they 404.
+FaroOS is an open-source (AGPL-3.0), self-hosted, multi-server control panel — think CasaOS/ZimaOS but for a fleet of servers. Two Go binaries matter here:
 
-Existing conventions to follow (look at `web/src/routes/+page.svelte` and `web/src/lib/components/NodeCard.svelte` for reference):
-- Use the `TopBar` component (`$lib/components/TopBar.svelte`) at the top of every page, passing a `title` prop.
-- Use the CSS variables already defined in `web/src/routes/layout.css` for colors — `var(--surface)`, `var(--border)`, `var(--fg)`, `var(--fg-muted)`, `var(--fg-subtle)`, `var(--accent)`, `var(--accent-fg)`, `var(--bg)`, `var(--track)`. Don't hardcode hex colors or use Tailwind's default gray/blue palette — everything must theme correctly in both light and dark (the app toggles `data-theme` on `<html>`).
-- Rounded-2xl cards (`rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5`) are the base visual unit, matching `NodeCard.svelte`.
-- Svelte 5 runes only (`$state`, `$derived`, `$props`, `$effect`) — no `export let`, no Svelte 4 stores unless there's a real reason.
-- TypeScript, no `any`.
+- `cmd/server` — the central panel (one instance, run on whichever machine is the "hub"). Builds to `faroos-server`. Listens on `FAROOS_PORT` (default 8090), stores data in a SQLite file at `FAROOS_DB` (default `faroos.db`), serves the web UI it finds in `./web/build` relative to its working directory.
+- `cmd/agent` — runs on every managed server. Builds to `faroos-agent`. Requires env vars `FAROOS_SERVER` (websocket URL of the panel), `FAROOS_NODE_ID`, `FAROOS_TOKEN` (both obtained by pairing a new server from the web UI). Optional: `FAROOS_DOCKER_SOCKET` (default `/var/run/docker.sock`), `FAROOS_FILES_ROOT` (default home dir), `FAROOS_APPS_DATA_DIR` (default `~/faroos-apps`).
 
-## Pages to build
+Both are static Go binaries (no CGO, no runtime dependencies) — this matters, it's why installation can be "drop a binary + a systemd unit", nothing more.
 
-All under `web/src/routes/<name>/+page.svelte`. Each currently 404s because the sidebar links exist but the route doesn't.
+## Task 1: curl-install script
 
-1. **`/nodes`** — "Servers" page. For now this can reuse the same node list as the dashboard (`$lib/api.ts` already exports `listNodes()`), but as a **table** instead of cards: columns Name, Status (connected/disconnected dot), CPU %, Memory, Disk, Uptime, Last seen. Sortable by clicking column headers is a nice-to-have, not required.
-2. **`/containers`** — Empty state page: centered message "No servers connected yet" if `listNodes()` returns zero connected nodes, otherwise "Container management is coming soon" — this page is a placeholder, there's no container API yet. Keep it simple, just the empty-state pattern already used in the dashboard's `+page.svelte` (copy that visual pattern: dashed border box, centered text).
-3. **`/storage`** — Same placeholder pattern as containers: "Storage management is coming soon."
-4. **`/apps`** — "App Store" placeholder. Slightly more effort: show a static, hardcoded grid of ~6 example app cards (name, one-line description, a "Coming soon" disabled button) to communicate intent — e.g. Nextcloud, Immich, Vaultwarden, Jellyfin, Pi-hole, Uptime Kuma. Purely visual, no backend calls.
-5. **`/terminal`** — Placeholder: "Web terminal is coming soon." Same dashed-box pattern.
-6. **`/files`** — Placeholder: "File manager is coming soon." Same dashed-box pattern.
-7. **`/settings`** — Slightly more real: a simple form-like page with a couple of sections in cards — "Appearance" (a light/dark toggle that calls `toggleTheme()` / `getTheme()` from `$lib/theme.svelte.ts`, redundant with the top bar toggle but expected here too) and "About" (shows "FaroOS" name, and links to the (future) GitHub repo — use a placeholder `#` href for now, don't invent a real URL).
+Create `packaging/install.sh`. Requirements:
+- Usage: `curl -fsSL https://raw.githubusercontent.com/.../install.sh | sudo bash -s -- agent` or `... -s -- server` (component chosen via first positional arg; if omitted, prompt or default to `agent` with a clear echo of what it's doing — no silent defaults).
+- Detects OS (Linux only for now; exit with a clear error on anything else) and architecture (amd64/arm64; exit clearly otherwise).
+- Downloads the correct prebuilt binary from GitHub Releases for the detected component+arch — construct the URL from a `REPO` variable at the top of the script (placeholder `gonzalo/faroos`, easy to find-and-replace once the real org exists) and a `VERSION` variable defaulting to `latest` (resolve "latest" via the GitHub API `releases/latest` endpoint, same pattern as most curl-installers).
+- Installs the binary to `/usr/local/bin/faroos-agent` or `/usr/local/bin/faroos-server`.
+- Installs and enables a systemd unit (see task 2) and starts it.
+- For the agent component specifically: since `FAROOS_SERVER`/`FAROOS_NODE_ID`/`FAROOS_TOKEN` are per-install secrets generated by pairing a server in the web UI, the script must NOT invent or hardcode these — prompt interactively for all three (with a clear explanation that they come from "Dashboard → Add server" in the panel), write them into `/etc/faroos/agent.env`, and reference that file from the systemd unit via `EnvironmentFile=`. If the script is piped through `curl | bash` (no TTY for prompts), detect that (`[ -t 0 ]`) and instead print clear instructions for the user to create `/etc/faroos/agent.env` by hand and enable the service themselves — don't hang forever waiting for input that will never come.
+- For the server component: no secrets needed upfront; just install + start it, then print the URL to open (`http://<hostname>:8090`) to finish first-run setup (admin account creation) in the browser.
+- Idempotent: running it again on an existing install should update the binary and restart the service, not error out.
+- Use `set -euo pipefail`. Comment only where the reasoning isn't obvious from the code.
+
+## Task 2: systemd units
+
+Create `packaging/systemd/faroos-agent.service` and `packaging/systemd/faroos-server.service`. Standard hardened-ish units: `Restart=on-failure`, `User=faroos` (create this system user in the install script / package postinstall — don't run either binary as root), reasonable `WorkingDirectory`, `EnvironmentFile=-/etc/faroos/agent.env` (agent) or `-/etc/faroos/server.env` (server, for optional `FAROOS_PORT`/`FAROOS_DB` overrides).
+
+Note: the agent needs access to `/var/run/docker.sock` (for container management) and to spawn PTYs (for the terminal feature) — add the `faroos` user to the `docker` group in the install script/postinstall rather than running as root, and don't add restrictive systemd sandboxing directives (ProtectSystem, NoNewPrivileges, etc.) that would break Docker socket access or PTY spawning — correctness here matters more than defense-in-depth for this MVP.
+
+## Task 3: .deb and .rpm packages via nfpm
+
+Add `packaging/nfpm.agent.yaml` and `packaging/nfpm.server.yaml` (nfpm: https://nfpm.goreleaser.com/ — a single YAML-driven tool that builds both .deb and .rpm from the same config, no need to hand-write debian/rpm spec files). Each package should:
+- Ship the respective binary to `/usr/local/bin/`
+- Ship its systemd unit to `/lib/systemd/system/`
+- Include postinstall/postremove scripts (`packaging/scripts/`) that create/remove the `faroos` system user and reload systemd — check nfpm's `scripts:` config for the right hook names.
+- Depend on nothing exotic — these are static binaries. Don't declare a dependency on `docker.io`/`docker-ce` (users may have Docker installed under many different package names); mention the Docker requirement in the package description instead.
+
+Add a CI job to `.github/workflows/ci.yml` (new job, append it — don't touch existing jobs) that installs nfpm and builds all 4 packages (agent × deb/rpm, server × deb/rpm) after the existing `go-build-matrix` job, uploading them as artifacts. Look at the existing jobs in that file for the style/conventions already in use (Go version, checkout action version, etc.) and match them.
+
+## Task 4: README section
+
+Add an "## Installing" section to `README.md` (the repo root one) documenting the curl-install one-liner for both components, and a one-line mention that `.deb`/`.rpm` packages are also available from GitHub Releases. Keep it short — a few lines per component, consistent in tone with the rest of that file (it's fairly terse/technical already).
 
 ## Definition of done
 
-- `npx svelte-check --tsconfig ./tsconfig.json` (run from `web/`) reports 0 errors.
-- `npm run build` (from `web/`) succeeds.
-- All 7 routes are reachable from the sidebar without 404s.
-- No new dependencies added to `package.json` without a clear reason.
+- `bash -n packaging/install.sh` passes (syntax check).
+- `shellcheck packaging/install.sh` if shellcheck is available in this environment — fix anything it flags at error/warning level; note in your final report if shellcheck wasn't available so this couldn't be checked.
+- nfpm config files are valid YAML (any quick sanity check you can do, e.g. `python3 -c "import yaml; yaml.safe_load(open('...'))"` if nfpm itself isn't installed to actually run it).
+- Report back: what you built, what you verified, what you couldn't verify (e.g. if nfpm/shellcheck aren't installed) and why.
 
 Do not run `git commit`. Leave changes staged/unstaged for review.

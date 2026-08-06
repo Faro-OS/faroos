@@ -1,0 +1,25 @@
+name: faroos-server
+arch: ${GOARCH}
+platform: linux
+version: ${VERSION}
+section: admin
+priority: optional
+maintainer: FaroOS maintainers
+description: |-
+  FaroOS central panel for managing a fleet of servers.
+  Managed nodes need Docker, but no specific Docker package is mandated.
+vendor: FaroOS
+homepage: https://github.com/gonzalo/faroos
+license: AGPL-3.0
+contents:
+  - src: dist/faroos-server
+    dst: /usr/local/bin/faroos-server
+    file_info:
+      mode: 0755
+  - src: packaging/systemd/faroos-server.service
+    dst: /lib/systemd/system/faroos-server.service
+    file_info:
+      mode: 0644
+scripts:
+  postinstall: packaging/scripts/server-postinstall.sh
+  postremove: packaging/scripts/server-postremove.sh

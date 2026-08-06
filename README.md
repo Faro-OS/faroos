@@ -40,3 +40,19 @@ AGPL-3.0. See `LICENSE`. Chosen so that anyone offering FaroOS as a hosted servi
 ## Contributing
 
 Open to contributors from day one. CI runs lint/build/test on every PR. No CLA required. (CONTRIBUTING.md coming soon.)
+
+## Installing
+
+Install the central panel, then open `http://<hostname>:8090` to create the first administrator account:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/gonzalo/faroos/main/packaging/install.sh | sudo bash -s -- server
+```
+
+On each managed server, use Dashboard → Add server in the panel, then install the agent and follow the printed pairing instructions:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/gonzalo/faroos/main/packaging/install.sh | sudo bash -s -- agent
+```
+
+Prebuilt `.deb` and `.rpm` packages are also available from GitHub Releases.
