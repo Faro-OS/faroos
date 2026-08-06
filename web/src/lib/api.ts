@@ -3,12 +3,20 @@
 // via .env to point at a running `go run ./cmd/server` instance.
 const API_BASE = import.meta.env.VITE_API_BASE ?? '';
 
+export interface Disk {
+	mountPoint: string;
+	filesystem: string;
+	totalBytes: number;
+	usedBytes: number;
+}
+
 export interface Stats {
 	cpuPercent: number;
 	memUsedBytes: number;
 	memTotalBytes: number;
 	diskUsedBytes: number;
 	diskTotalBytes: number;
+	disks?: Disk[];
 	uptimeSeconds: number;
 	timestamp: string;
 }

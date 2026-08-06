@@ -20,9 +20,71 @@ func collect() model.Stats {
 		MemTotalBytes:  memTotal(),
 		DiskUsedBytes:  diskUsed("/"),
 		DiskTotalBytes: diskTotal("/"),
+		Disks:          realDisks(),
 		Uptime:         uptimeSeconds(),
 		Timestamp:      time.Now(),
 	}
+}
+
+// pseudoFilesystems are mount types that don't represent real, physical-ish
+// storage — no point showing them on a storage page.
+var pseudoFilesystems = map[string]bool{
+	"proc": true, "sysfs": true, "tmpfs": true, "devtmpfs": true,
+	"cgroup": true, "cgroup2": true, "overlay": true, "squashfs": true,
+	"devpts": true, "mqueue": true, "debugfs": true, "tracefs": true,
+	"fusectl": true, "configfs": true, "ramfs": true, "nsfs": true,
+	"binfmt_misc": true, "autofs": true, "rpc_pipefs": true,
+	"securityfs": true, "pstore": true, "bpf": true, "hugetlbfs": true,
+	"sunrpc": true, "efivarfs": true, "fuse.gvfsd-fuse": true,
+}
+
+// realDisks reads /proc/mounts and reports usage for real, physical-ish
+// filesystems only, deduplicated by source device (bind mounts and
+// container overlay mounts otherwise show the same disk many times over).
+func realDisks() []model.Disk {
+	f, err := os.Open("/proc/mounts")
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	seenDevices := make(map[string]bool)
+	var disks []model.Disk
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 3 {
+			continue
+		}
+		device, mountPoint, fsType := fields[0], fields[1], fields[2]
+
+		if pseudoFilesystems[fsType] || !strings.HasPrefix(device, "/dev/") {
+			continue
+		}
+		if seenDevices[device] {
+			continue
+		}
+
+		var stat syscall.Statfs_t
+		if err := syscall.Statfs(mountPoint, &stat); err != nil {
+			continue
+		}
+		total := stat.Blocks * uint64(stat.Bsize)
+		if total == 0 {
+			continue
+		}
+		free := stat.Bfree * uint64(stat.Bsize)
+
+		seenDevices[device] = true
+		disks = append(disks, model.Disk{
+			MountPoint: mountPoint,
+			Filesystem: fsType,
+			TotalBytes: total,
+			UsedBytes:  total - free,
+		})
+	}
+	return disks
 }
 
 // cpuPercent samples /proc/stat twice, 200ms apart, and returns overall
