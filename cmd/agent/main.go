@@ -8,13 +8,16 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 
+	"github.com/faroos/faroos/internal/appcatalog"
 	"github.com/faroos/faroos/internal/dockerclient"
 	"github.com/faroos/faroos/internal/fileops"
 	"github.com/faroos/faroos/internal/proto"
@@ -30,6 +33,7 @@ type deps struct {
 	docker    *dockerclient.Client
 	files     *fileops.Root
 	terminals *termsession.Manager
+	appsDir   string
 }
 
 func main() {
@@ -56,10 +60,24 @@ func main() {
 	}
 	log.Printf("file manager root: %s", filesRoot)
 
+	appsDir := os.Getenv("FAROOS_APPS_DATA_DIR")
+	if appsDir == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			appsDir = home + "/faroos-apps"
+		} else {
+			appsDir = "./faroos-apps"
+		}
+	}
+	if err := os.MkdirAll(appsDir, 0o755); err != nil {
+		log.Fatalf("failed to create apps data dir %s: %v", appsDir, err)
+	}
+	log.Printf("app store data dir: %s", appsDir)
+
 	d := &deps{
 		docker:    dockerclient.New(dockerSocket),
 		files:     files,
 		terminals: termsession.NewManager(),
+		appsDir:   appsDir,
 	}
 
 	for {
@@ -139,7 +157,12 @@ func runOnce(serverURL, nodeID, token string, d *deps) error {
 }
 
 func handleCommand(d *deps, cmd proto.Command, writeJSON func(any) error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	timeout := 20 * time.Second
+	if cmd.Action == "apps.deploy" {
+		// Pulling a cold image can take minutes on a slow connection.
+		timeout = 10 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	result, err := dispatch(ctx, d, cmd)
@@ -251,9 +274,90 @@ func dispatch(ctx context.Context, d *deps, cmd proto.Command) (any, error) {
 		}
 		return nil, d.files.Delete(p.Path)
 
+	case "apps.deploy":
+		var p appIDParams
+		if err := json.Unmarshal(cmd.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, deployApp(ctx, d, p.AppID)
+
+	case "apps.remove":
+		var p appIDParams
+		if err := json.Unmarshal(cmd.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, removeApp(ctx, d, p.AppID)
+
 	default:
 		return nil, unknownActionError(cmd.Action)
 	}
+}
+
+type appIDParams struct {
+	AppID string `json:"appId"`
+}
+
+func deployApp(ctx context.Context, d *deps, appID string) error {
+	app, ok := appcatalog.Find(appID)
+	if !ok {
+		return fmt.Errorf("unknown app: %s", appID)
+	}
+
+	if err := d.docker.PullImage(ctx, app.Image); err != nil {
+		return err
+	}
+
+	portBindings := make(map[string]int, len(app.Ports))
+	for _, p := range app.Ports {
+		portProto := p.Protocol
+		if portProto == "" {
+			portProto = "tcp"
+		}
+		portBindings[fmt.Sprintf("%d/%s", p.Container, portProto)] = p.Host
+	}
+
+	binds := make([]string, 0, len(app.Volumes))
+	for _, v := range app.Volumes {
+		hostPath := filepath.Join(d.appsDir, app.ID, v.Name)
+		if err := os.MkdirAll(hostPath, 0o755); err != nil {
+			return err
+		}
+		binds = append(binds, hostPath+":"+v.Container)
+	}
+
+	env := make([]string, 0, len(app.Env))
+	for k, v := range app.Env {
+		env = append(env, k+"="+v)
+	}
+
+	containerName := appcatalog.ContainerName(app.ID)
+	if existing, err := d.docker.FindByName(ctx, containerName); err == nil && existing != nil {
+		return fmt.Errorf("%s is already deployed", app.Name)
+	}
+
+	id, err := d.docker.CreateContainer(ctx, dockerclient.ContainerSpec{
+		Name:         containerName,
+		Image:        app.Image,
+		Env:          env,
+		PortBindings: portBindings,
+		Binds:        binds,
+	})
+	if err != nil {
+		return err
+	}
+	return d.docker.StartContainer(ctx, id)
+}
+
+func removeApp(ctx context.Context, d *deps, appID string) error {
+	containerName := appcatalog.ContainerName(appID)
+	existing, err := d.docker.FindByName(ctx, containerName)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return fmt.Errorf("%s is not deployed", appID)
+	}
+	return d.docker.RemoveContainer(ctx, existing.ID)
 }
 
 func handleTerminalOpen(terminals *termsession.Manager, open proto.TerminalOpen, writeJSON func(any) error) {

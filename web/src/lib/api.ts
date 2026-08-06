@@ -145,6 +145,39 @@ export function deleteFile(nodeId: string, path: string): Promise<{ ok: boolean 
 	return request(`/api/nodes/${nodeId}/files?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
 }
 
+export interface AppPort {
+	container: number;
+	host: number;
+	protocol: string;
+}
+
+export interface AppVolume {
+	name: string;
+	container: string;
+}
+
+export interface CatalogApp {
+	id: string;
+	name: string;
+	description: string;
+	image: string;
+	ports: AppPort[];
+	volumes: AppVolume[];
+	env?: Record<string, string>;
+}
+
+export function listApps(): Promise<CatalogApp[]> {
+	return request<CatalogApp[]>('/api/apps');
+}
+
+export function deployApp(nodeId: string, appId: string): Promise<{ ok: boolean }> {
+	return request(`/api/nodes/${nodeId}/apps/${appId}/deploy`, { method: 'POST' });
+}
+
+export function removeApp(nodeId: string, appId: string): Promise<{ ok: boolean }> {
+	return request(`/api/nodes/${nodeId}/apps/${appId}/remove`, { method: 'POST' });
+}
+
 export function terminalWsUrl(nodeId: string, cols: number, rows: number): string {
 	const origin =
 		API_BASE || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8090');

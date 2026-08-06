@@ -56,6 +56,10 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/nodes/{id}/files/upload", s.requireAuth(s.handleUploadFile))
 	mux.HandleFunc("DELETE /api/nodes/{id}/files", s.requireAuth(s.handleDeleteFile))
 
+	mux.HandleFunc("GET /api/apps", s.requireAuth(s.handleListApps))
+	mux.HandleFunc("POST /api/nodes/{id}/apps/{appId}/deploy", s.requireAuth(s.handleDeployApp))
+	mux.HandleFunc("POST /api/nodes/{id}/apps/{appId}/remove", s.requireAuth(s.handleRemoveApp))
+
 	// Agents authenticate with their own pairing token inside the hello
 	// message, not with an admin session — this endpoint is intentionally
 	// outside requireAuth.

@@ -84,8 +84,16 @@ func (h *hub) get(nodeID string) (*agentConn, bool) {
 }
 
 // send writes a command to the agent and blocks until the matching
-// command_result arrives (matched by command ID) or the timeout elapses.
+// command_result arrives (matched by command ID) or the default timeout
+// elapses.
 func (ac *agentConn) send(cmd proto.Command) (proto.CommandResult, error) {
+	return ac.sendWithTimeout(cmd, commandTimeout)
+}
+
+// sendWithTimeout is send with a caller-chosen timeout, for commands that
+// are expected to take longer than the default (e.g. deploying an app,
+// which may need to pull a large image first).
+func (ac *agentConn) sendWithTimeout(cmd proto.Command, timeout time.Duration) (proto.CommandResult, error) {
 	resultCh := make(chan proto.CommandResult, 1)
 
 	ac.pendingMu.Lock()
@@ -111,7 +119,7 @@ func (ac *agentConn) send(cmd proto.Command) (proto.CommandResult, error) {
 			return proto.CommandResult{}, errNodeNotConnected
 		}
 		return result, nil
-	case <-time.After(commandTimeout):
+	case <-time.After(timeout):
 		return proto.CommandResult{}, errCommandTimeout
 	}
 }

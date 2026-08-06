@@ -5,12 +5,14 @@
 package dockerclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -25,9 +27,10 @@ type Client struct {
 func New(socketPath string) *Client {
 	return &Client{
 		http: &http.Client{
-			// Stopping a container gracefully can itself take up to Docker's
-			// default 10s SIGTERM grace period before it's force-killed.
-			Timeout: 30 * time.Second,
+			// Generous ceiling — actual bounding comes from the context each
+			// call is given. Needs to be long enough for a cold image pull
+			// (can be minutes), not just quick container actions.
+			Timeout: 10 * time.Minute,
 			Transport: &http.Transport{
 				DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 					d := net.Dialer{}
@@ -196,10 +199,135 @@ func demultiplexLogs(raw []byte) string {
 	return string(out)
 }
 
+// PullImage pulls an image (with tag/digest included in the ref, e.g.
+// "louislam/uptime-kuma:1") and blocks until the pull finishes, erroring
+// out if the daemon reports a failure partway through the stream.
+func (c *Client) PullImage(ctx context.Context, image string) error {
+	res, err := c.do(ctx, http.MethodPost, "/images/create?fromImage="+url.QueryEscape(image), nil)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return statusErr(res)
+	}
+
+	dec := json.NewDecoder(res.Body)
+	for {
+		var line struct {
+			Error string `json:"error"`
+		}
+		if err := dec.Decode(&line); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if line.Error != "" {
+			return fmt.Errorf("pulling %s: %s", image, line.Error)
+		}
+	}
+}
+
+// ContainerSpec is the minimal set of options FaroOS's app catalog needs to
+// deploy a single-container app.
+type ContainerSpec struct {
+	Name  string
+	Image string
+	// Env entries are "KEY=VALUE".
+	Env []string
+	// PortBindings maps "containerPort/proto" (e.g. "80/tcp") to a host
+	// port.
+	PortBindings map[string]int
+	// Binds are "hostPath:containerPath" volume mounts.
+	Binds []string
+}
+
+// CreateContainer creates (but does not start) a container per spec,
+// returning its ID.
+func (c *Client) CreateContainer(ctx context.Context, spec ContainerSpec) (string, error) {
+	exposedPorts := map[string]struct{}{}
+	portBindings := map[string][]map[string]string{}
+	for containerPort, hostPort := range spec.PortBindings {
+		exposedPorts[containerPort] = struct{}{}
+		portBindings[containerPort] = []map[string]string{{"HostPort": fmt.Sprintf("%d", hostPort)}}
+	}
+
+	body := map[string]any{
+		"Image":        spec.Image,
+		"Env":          spec.Env,
+		"ExposedPorts": exposedPorts,
+		"HostConfig": map[string]any{
+			"PortBindings":  portBindings,
+			"Binds":         spec.Binds,
+			"RestartPolicy": map[string]string{"Name": "unless-stopped"},
+		},
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return "", err
+	}
+
+	res, err := c.do(ctx, http.MethodPost, "/containers/create?name="+url.QueryEscape(spec.Name), bytes.NewReader(payload))
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		return "", statusErr(res)
+	}
+
+	var created struct {
+		ID string `json:"Id"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&created); err != nil {
+		return "", err
+	}
+	return created.ID, nil
+}
+
+// FindByName returns the container whose first name matches "/"+name, if
+// any — Docker always prefixes container names with a slash internally.
+func (c *Client) FindByName(ctx context.Context, name string) (*Container, error) {
+	containers, err := c.ListContainers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	target := "/" + name
+	for i := range containers {
+		for _, n := range containers[i].Names {
+			if n == target {
+				return &containers[i], nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+// RemoveContainer force-removes a container (stopping it first if
+// running).
+func (c *Client) RemoveContainer(ctx context.Context, id string) error {
+	res, err := c.do(ctx, http.MethodDelete, fmt.Sprintf("/containers/%s?force=true", id), nil)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNoContent && res.StatusCode != http.StatusNotFound {
+		return statusErr(res)
+	}
+	return nil
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, "http://docker/"+apiVersion+path, body)
 	if err != nil {
 		return nil, err
+	}
+	if body != nil {
+		// The Docker daemon rejects POST bodies (e.g. /containers/create)
+		// without an explicit Content-Type: "malformed Content-Type
+		// header (): mime: no media type".
+		req.Header.Set("Content-Type", "application/json")
 	}
 	return c.http.Do(req)
 }
