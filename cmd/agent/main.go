@@ -16,12 +16,21 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/faroos/faroos/internal/dockerclient"
+	"github.com/faroos/faroos/internal/fileops"
 	"github.com/faroos/faroos/internal/proto"
 	"github.com/faroos/faroos/internal/sysstats"
 	"github.com/faroos/faroos/internal/termsession"
 )
 
 const version = "0.0.1-dev"
+
+// deps bundles the agent's local capabilities so they can be threaded
+// through the command dispatcher without an ever-growing parameter list.
+type deps struct {
+	docker    *dockerclient.Client
+	files     *fileops.Root
+	terminals *termsession.Manager
+}
 
 func main() {
 	serverURL := requireEnv("FAROOS_SERVER") // e.g. ws://panel.example.com/api/agent/connect
@@ -32,18 +41,36 @@ func main() {
 	if dockerSocket == "" {
 		dockerSocket = "/var/run/docker.sock"
 	}
-	docker := dockerclient.New(dockerSocket)
-	terminals := termsession.NewManager()
+
+	filesRoot := os.Getenv("FAROOS_FILES_ROOT")
+	if filesRoot == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			filesRoot = home
+		} else {
+			filesRoot = "."
+		}
+	}
+	files, err := fileops.NewRoot(filesRoot)
+	if err != nil {
+		log.Fatalf("failed to initialize files root %s: %v", filesRoot, err)
+	}
+	log.Printf("file manager root: %s", filesRoot)
+
+	d := &deps{
+		docker:    dockerclient.New(dockerSocket),
+		files:     files,
+		terminals: termsession.NewManager(),
+	}
 
 	for {
-		if err := runOnce(serverURL, nodeID, token, docker, terminals); err != nil {
+		if err := runOnce(serverURL, nodeID, token, d); err != nil {
 			log.Printf("connection lost: %v — reconnecting in 5s", err)
 		}
 		time.Sleep(5 * time.Second)
 	}
 }
 
-func runOnce(serverURL, nodeID, token string, docker *dockerclient.Client, terminals *termsession.Manager) error {
+func runOnce(serverURL, nodeID, token string, d *deps) error {
 	conn, _, err := websocket.DefaultDialer.Dial(serverURL, nil)
 	if err != nil {
 		return err
@@ -85,15 +112,15 @@ func runOnce(serverURL, nodeID, token string, docker *dockerclient.Client, termi
 			case env.Type == proto.TypeCommand && env.Command != nil:
 				// Run in its own goroutine so a slow command (e.g. fetching
 				// logs) doesn't stall reading further messages/pings.
-				go handleCommand(docker, *env.Command, writeJSON)
+				go handleCommand(d, *env.Command, writeJSON)
 			case env.Type == proto.TypeTerminalOpen && env.TerminalOpen != nil:
-				handleTerminalOpen(terminals, *env.TerminalOpen, writeJSON)
+				handleTerminalOpen(d.terminals, *env.TerminalOpen, writeJSON)
 			case env.Type == proto.TypeTerminalInput && env.TerminalData != nil:
-				handleTerminalInput(terminals, *env.TerminalData)
+				handleTerminalInput(d.terminals, *env.TerminalData)
 			case env.Type == proto.TypeTerminalResize && env.TerminalResize != nil:
-				terminals.Resize(env.TerminalResize.SessionID, env.TerminalResize.Cols, env.TerminalResize.Rows)
+				d.terminals.Resize(env.TerminalResize.SessionID, env.TerminalResize.Cols, env.TerminalResize.Rows)
 			case env.Type == proto.TypeTerminalClose && env.TerminalClose != nil:
-				terminals.Close(env.TerminalClose.SessionID)
+				d.terminals.Close(env.TerminalClose.SessionID)
 			}
 		}
 	}()
@@ -111,11 +138,11 @@ func runOnce(serverURL, nodeID, token string, docker *dockerclient.Client, termi
 	}
 }
 
-func handleCommand(docker *dockerclient.Client, cmd proto.Command, writeJSON func(any) error) {
+func handleCommand(d *deps, cmd proto.Command, writeJSON func(any) error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	result, err := dispatch(ctx, docker, cmd)
+	result, err := dispatch(ctx, d, cmd)
 
 	reply := proto.Envelope{
 		Type:          proto.TypeCommandResult,
@@ -147,10 +174,19 @@ type logsParams struct {
 	Tail int    `json:"tail"`
 }
 
-func dispatch(ctx context.Context, docker *dockerclient.Client, cmd proto.Command) (any, error) {
+type pathParams struct {
+	Path string `json:"path"`
+}
+
+type writeFileParams struct {
+	Path       string `json:"path"`
+	ContentB64 string `json:"contentB64"`
+}
+
+func dispatch(ctx context.Context, d *deps, cmd proto.Command) (any, error) {
 	switch cmd.Action {
 	case "containers.list":
-		return docker.ListContainers(ctx)
+		return d.docker.ListContainers(ctx)
 
 	case "containers.start", "containers.stop", "containers.restart":
 		var p containerIDParams
@@ -160,11 +196,11 @@ func dispatch(ctx context.Context, docker *dockerclient.Client, cmd proto.Comman
 		var err error
 		switch cmd.Action {
 		case "containers.start":
-			err = docker.StartContainer(ctx, p.ID)
+			err = d.docker.StartContainer(ctx, p.ID)
 		case "containers.stop":
-			err = docker.StopContainer(ctx, p.ID)
+			err = d.docker.StopContainer(ctx, p.ID)
 		case "containers.restart":
-			err = docker.RestartContainer(ctx, p.ID)
+			err = d.docker.RestartContainer(ctx, p.ID)
 		}
 		return nil, err
 
@@ -173,11 +209,47 @@ func dispatch(ctx context.Context, docker *dockerclient.Client, cmd proto.Comman
 		if err := json.Unmarshal(cmd.Params, &p); err != nil {
 			return nil, err
 		}
-		logs, err := docker.Logs(ctx, p.ID, p.Tail)
+		logs, err := d.docker.Logs(ctx, p.ID, p.Tail)
 		if err != nil {
 			return nil, err
 		}
 		return map[string]string{"logs": logs}, nil
+
+	case "files.list":
+		var p pathParams
+		if err := json.Unmarshal(cmd.Params, &p); err != nil {
+			return nil, err
+		}
+		return d.files.List(p.Path)
+
+	case "files.download":
+		var p pathParams
+		if err := json.Unmarshal(cmd.Params, &p); err != nil {
+			return nil, err
+		}
+		data, err := d.files.ReadFile(p.Path)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]string{"contentB64": base64.StdEncoding.EncodeToString(data)}, nil
+
+	case "files.upload":
+		var p writeFileParams
+		if err := json.Unmarshal(cmd.Params, &p); err != nil {
+			return nil, err
+		}
+		data, err := base64.StdEncoding.DecodeString(p.ContentB64)
+		if err != nil {
+			return nil, err
+		}
+		return nil, d.files.WriteFile(p.Path, data)
+
+	case "files.delete":
+		var p pathParams
+		if err := json.Unmarshal(cmd.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, d.files.Delete(p.Path)
 
 	default:
 		return nil, unknownActionError(cmd.Action)

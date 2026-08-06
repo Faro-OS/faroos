@@ -107,6 +107,36 @@ export function containerLogs(nodeId: string, containerId: string, tail = 200): 
 	return request(`/api/nodes/${nodeId}/containers/${containerId}/logs?tail=${tail}`);
 }
 
+export interface FileEntry {
+	name: string;
+	isDir: boolean;
+	size: number;
+	modTime: string;
+}
+
+export function listFiles(nodeId: string, path: string): Promise<FileEntry[]> {
+	return request<FileEntry[]>(`/api/nodes/${nodeId}/files?path=${encodeURIComponent(path)}`);
+}
+
+export function fileDownloadUrl(nodeId: string, path: string): string {
+	return `${API_BASE}/api/nodes/${nodeId}/files/download?path=${encodeURIComponent(path)}`;
+}
+
+export async function uploadFile(nodeId: string, path: string, file: File): Promise<void> {
+	const res = await fetch(`${API_BASE}/api/nodes/${nodeId}/files/upload?path=${encodeURIComponent(path)}`, {
+		method: 'POST',
+		credentials: 'include',
+		body: file
+	});
+	if (!res.ok) {
+		throw new Error(`upload failed: ${res.status}`);
+	}
+}
+
+export function deleteFile(nodeId: string, path: string): Promise<{ ok: boolean }> {
+	return request(`/api/nodes/${nodeId}/files?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+}
+
 export function terminalWsUrl(nodeId: string, cols: number, rows: number): string {
 	const origin =
 		API_BASE || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8090');
