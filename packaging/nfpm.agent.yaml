@@ -9,7 +9,7 @@ description: |-
   FaroOS agent for managed nodes.
   A working Docker installation is required, but no specific Docker package is mandated.
 vendor: FaroOS
-homepage: https://github.com/gonzalo/faroos
+homepage: https://github.com/Faro-OS/faroos
 license: AGPL-3.0
 contents:
   - src: dist/faroos-agent

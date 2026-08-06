@@ -46,13 +46,15 @@ Open to contributors from day one. CI runs lint/build/test on every PR. No CLA r
 Install the central panel, then open `http://<hostname>:8090` to create the first administrator account:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/gonzalo/faroos/main/packaging/install.sh | sudo bash -s -- server
+curl -fsSL https://raw.githubusercontent.com/Faro-OS/faroos/main/packaging/install.sh | sudo bash -s -- server
 ```
 
 On each managed server, use Dashboard → Add server in the panel, then install the agent and follow the printed pairing instructions:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/gonzalo/faroos/main/packaging/install.sh | sudo bash -s -- agent
+curl -fsSL https://raw.githubusercontent.com/Faro-OS/faroos/main/packaging/install.sh | sudo bash -s -- agent
 ```
 
 Prebuilt `.deb` and `.rpm` packages are also available from GitHub Releases.
+
+Starting from a blank machine instead? See `packaging/iso/` for a bootable, unattended-install ISO (Ubuntu Server underneath, not a custom distro).

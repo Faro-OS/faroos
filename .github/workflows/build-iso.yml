@@ -1,0 +1,40 @@
+name: Build install ISO
+
+# Manual trigger only — this downloads several GB of Ubuntu Server ISO and
+# takes a while to run, so it deliberately doesn't run on every push like
+# ci.yml does.
+on:
+  workflow_dispatch:
+    inputs:
+      ubuntu_version:
+        description: 'Ubuntu Server point release'
+        required: false
+        default: '24.04.4'
+      faroos_component:
+        description: 'FaroOS component to install on first boot'
+        required: false
+        default: 'server'
+        type: choice
+        options:
+          - server
+          - agent
+
+jobs:
+  build-iso:
+    name: Build FaroOS install ISO
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y xorriso isolinux
+      - name: Build ISO
+        env:
+          UBUNTU_VERSION: ${{ github.event.inputs.ubuntu_version }}
+          FAROOS_COMPONENT: ${{ github.event.inputs.faroos_component }}
+        run: ./packaging/iso/build-iso.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: faroos-install-iso
+          path: |
+            packaging/iso/dist/*.iso
+            packaging/iso/dist/*.CREDENTIALS.txt

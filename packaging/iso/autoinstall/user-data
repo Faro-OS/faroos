@@ -1,0 +1,54 @@
+#cloud-config
+autoinstall:
+  version: 1
+
+  # This is a stock Ubuntu Server autoinstall — see packaging/iso/README.md
+  # for what this ISO does and doesn't do. It WIPES the target disk
+  # (storage.layout below), same as any OS installer image (including
+  # ZimaOS's own).
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+
+  storage:
+    layout:
+      name: direct # whole-disk, no LVM — this is a dedicated appliance box, not a general-purpose server someone will repartition later
+
+  identity:
+    hostname: faroos
+    username: __FAROOS_USERNAME__
+    # SHA-512 crypt hash generated per-build by build-iso.sh (openssl passwd
+    # -6) — the plaintext password is written next to the built ISO in a
+    # CREDENTIALS.txt. Rebuild the ISO to change it before install, or just
+    # `passwd` after first boot.
+    password: "__FAROOS_PASSWORD_HASH__"
+
+  ssh:
+    install-server: true
+    # Password SSH auth, not just keys: the whole point of this ISO is
+    # zero-touch setup on a fresh box where nobody has pre-staged a key.
+    # The generated password is long/random (see CREDENTIALS.txt) — treat
+    # it like any other root-equivalent credential.
+    allow-pw: true
+
+  packages:
+    - docker.io
+    - curl
+
+  updates: security
+
+  late-commands:
+    # curtin in-target chroots into the freshly-installed system to run
+    # this. There's no running systemd/dbus inside that chroot, so the
+    # `systemctl restart` inside install.sh WILL fail there — but
+    # `systemctl enable` (a plain symlink operation) succeeds offline, and
+    # that's all that's actually needed: the enabled unit starts itself on
+    # the real first boot triggered by `shutdown: reboot` below. `|| true`
+    # swallows the expected restart failure so this late-command doesn't
+    # abort the install over something that isn't actually a problem.
+    - >-
+      curtin in-target -- bash -c
+      'curl -fsSL https://raw.githubusercontent.com/Faro-OS/faroos/main/packaging/install.sh
+      | bash -s -- __FAROOS_COMPONENT__ || true'
+
+  shutdown: reboot

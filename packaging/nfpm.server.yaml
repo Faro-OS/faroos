@@ -9,7 +9,7 @@ description: |-
   FaroOS central panel for managing a fleet of servers.
   Managed nodes need Docker, but no specific Docker package is mandated.
 vendor: FaroOS
-homepage: https://github.com/gonzalo/faroos
+homepage: https://github.com/Faro-OS/faroos
 license: AGPL-3.0
 contents:
   - src: dist/faroos-server

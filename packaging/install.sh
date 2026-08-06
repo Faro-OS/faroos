@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-REPO="${REPO:-gonzalo/faroos}"
+REPO="${REPO:-Faro-OS/faroos}"
 VERSION="${VERSION:-latest}"
 
 die() {
