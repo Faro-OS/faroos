@@ -1,0 +1,21 @@
+bin/
+dist/
+*.log
+
+# Go
+/vendor/
+
+# Node / SvelteKit
+web/node_modules/
+web/.svelte-kit/
+web/build/
+
+# Tauri / Rust
+desktop/src-tauri/target/
+desktop/node_modules/
+
+# Local data
+*.db
+*.sqlite
+data/
+.env

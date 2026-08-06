@@ -1,0 +1,122 @@
+// Package api implements the central panel's HTTP + websocket API.
+package api
+
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/faroos/faroos/internal/proto"
+	"github.com/faroos/faroos/internal/registry"
+	"github.com/gorilla/websocket"
+)
+
+type Server struct {
+	reg      *registry.Registry
+	upgrader websocket.Upgrader
+}
+
+func New(reg *registry.Registry) *Server {
+	return &Server{
+		reg: reg,
+		upgrader: websocket.Upgrader{
+			// Agents and the web UI are both first-party; origin checking
+			// matters once this is exposed beyond localhost/dev.
+			CheckOrigin: func(r *http.Request) bool { return true },
+		},
+	}
+}
+
+func (s *Server) Routes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /api/nodes", s.handleCreatePairing)
+	mux.HandleFunc("GET /api/nodes", s.handleListNodes)
+	mux.HandleFunc("GET /api/nodes/{id}", s.handleGetNode)
+	mux.HandleFunc("GET /api/agent/connect", s.handleAgentConnect)
+}
+
+type createPairingReq struct {
+	Name string `json:"name"`
+}
+
+func (s *Server) handleCreatePairing(w http.ResponseWriter, r *http.Request) {
+	var req createPairingReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	n, err := s.reg.CreatePairing(req.Name)
+	if err != nil {
+		http.Error(w, "failed to create pairing", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{
+		"id":    n.ID,
+		"name":  n.Name,
+		"token": n.Token,
+	})
+}
+
+func (s *Server) handleListNodes(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.reg.List())
+}
+
+func (s *Server) handleGetNode(w http.ResponseWriter, r *http.Request) {
+	n, err := s.reg.Get(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	writeJSON(w, n)
+}
+
+// handleAgentConnect upgrades the connection, expects a hello envelope
+// carrying pairing credentials, then streams stats updates.
+func (s *Server) handleAgentConnect(w http.ResponseWriter, r *http.Request) {
+	conn, err := s.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("agent connect: upgrade failed: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	var env proto.Envelope
+	if err := conn.ReadJSON(&env); err != nil || env.Type != proto.TypeHello || env.Hello == nil {
+		log.Printf("agent connect: expected hello, got err=%v", err)
+		return
+	}
+
+	node, err := s.reg.Authenticate(env.Hello.NodeID, env.Hello.Token)
+	if err != nil {
+		log.Printf("agent connect: auth failed for node %s: %v", env.Hello.NodeID, err)
+		conn.WriteJSON(map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	s.reg.SetConnected(node.ID, true)
+	defer s.reg.SetConnected(node.ID, false)
+	log.Printf("agent connected: %s (%s)", node.Name, node.ID)
+
+	for {
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		var msg proto.Envelope
+		if err := conn.ReadJSON(&msg); err != nil {
+			log.Printf("agent %s disconnected: %v", node.ID, err)
+			return
+		}
+		switch msg.Type {
+		case proto.TypeStats:
+			if msg.Stats != nil {
+				s.reg.UpdateStats(node.ID, *msg.Stats)
+			}
+		case proto.TypePing:
+			conn.WriteJSON(proto.Envelope{Type: proto.TypePong})
+		}
+	}
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(v)
+}

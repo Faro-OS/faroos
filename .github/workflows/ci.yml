@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go-test:
+    name: Go build, vet & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...
+      - name: gofmt check
+        run: |
+          fmt_out="$(gofmt -l .)"
+          if [ -n "$fmt_out" ]; then
+            echo "The following files are not gofmt'd:"
+            echo "$fmt_out"
+            exit 1
+          fi
+
+  go-build-matrix:
+    name: Cross-compile (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: go-test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+      - name: Build server + agent
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p dist
+          ext=""
+          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
+          go build -o "dist/faroos-server-$GOOS-$GOARCH$ext" ./cmd/server
+          go build -o "dist/faroos-agent-$GOOS-$GOARCH$ext" ./cmd/agent
+      - uses: actions/upload-artifact@v4
+        with:
+          name: faroos-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+
+  web:
+    name: Frontend build & check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npx svelte-kit sync
+      - run: npx svelte-check --tsconfig ./tsconfig.json
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: faroos-web-build
+          path: web/build
