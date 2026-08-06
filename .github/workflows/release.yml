@@ -1,34 +1,14 @@
-name: CI
+name: Release
 
+# Fires on version tags (v0.1.0, v1.2.3, ...). Builds everything
+# distributable — cross-platform binaries, .deb/.rpm packages, the install
+# ISO — and publishes them all as a single GitHub Release.
 on:
   push:
-    branches: [main]
-  pull_request:
+    tags:
+      - 'v*'
 
 jobs:
-  go-test:
-    name: Go build, vet & test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-          cache: true
-      # Uses the tracked placeholder in internal/webui/dist — this job
-      # checks Go correctness, not the real UI, so it doesn't need Node.
-      - run: go build ./...
-      - run: go vet ./...
-      - run: go test ./...
-      - name: gofmt check
-        run: |
-          fmt_out="$(gofmt -l .)"
-          if [ -n "$fmt_out" ]; then
-            echo "The following files are not gofmt'd:"
-            echo "$fmt_out"
-            exit 1
-          fi
-
   web:
     name: Frontend build & check
     runs-on: ubuntu-latest
@@ -46,8 +26,6 @@ jobs:
       - run: npx svelte-kit sync
       - run: npx svelte-check --tsconfig ./tsconfig.json
       - run: npm run build
-      # Lands in internal/webui/dist per vite.config.ts's adapter-static
-      # output paths (it's go:embed'd into cmd/server, see internal/webui).
       - uses: actions/upload-artifact@v4
         with:
           name: faroos-web-dist
@@ -55,7 +33,7 @@ jobs:
 
   go-build-matrix:
     name: Cross-compile (${{ matrix.goos }}/${{ matrix.goarch }})
-    needs: [go-test, web]
+    needs: web
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -80,8 +58,8 @@ jobs:
           mkdir -p dist
           ext=""
           if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
-          go build -o "dist/faroos-server-$GOOS-$GOARCH$ext" ./cmd/server
-          go build -o "dist/faroos-agent-$GOOS-$GOARCH$ext" ./cmd/agent
+          go build -ldflags "-X main.version=${GITHUB_REF_NAME}" -o "dist/faroos-server-$GOOS-$GOARCH$ext" ./cmd/server
+          go build -ldflags "-X main.version=${GITHUB_REF_NAME}" -o "dist/faroos-agent-$GOOS-$GOARCH$ext" ./cmd/agent
       - uses: actions/upload-artifact@v4
         with:
           name: faroos-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -109,8 +87,9 @@ jobs:
       - name: Build deb and rpm packages
         env:
           GOARCH: ${{ matrix.goarch }}
-          VERSION: 0.0.0-ci.${{ github.run_number }}
+          VERSION: ${{ github.ref_name }}
         run: |
+          version_num="${VERSION#v}"
           mv "dist/faroos-agent-linux-$GOARCH" dist/faroos-agent
           mv "dist/faroos-server-linux-$GOARCH" dist/faroos-server
           for component in agent server; do
@@ -118,12 +97,57 @@ jobs:
               nfpm package \
                 --config "packaging/nfpm.$component.yaml" \
                 --packager "$packager" \
-                --target "dist/faroos-$component-$VERSION-$GOARCH.$packager"
+                --target "dist/faroos-$component-$version_num-$GOARCH.$packager"
             done
           done
+          rm dist/faroos-agent dist/faroos-server
       - uses: actions/upload-artifact@v4
         with:
           name: faroos-native-packages-linux-${{ matrix.goarch }}
           path: |
             dist/*.deb
             dist/*.rpm
+
+  iso:
+    name: Build install ISO
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y xorriso isolinux
+      - name: Build ISO
+        run: ./packaging/iso/build-iso.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: faroos-install-iso
+          path: |
+            packaging/iso/dist/*.iso
+            packaging/iso/dist/*.CREDENTIALS.txt
+
+  publish:
+    name: Publish GitHub Release
+    needs: [go-build-matrix, native-packages, iso]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Flatten artifacts into one release directory
+        run: |
+          mkdir -p release
+          find artifacts -type f \( \
+            -name 'faroos-server-*' -o \
+            -name 'faroos-agent-*' -o \
+            -name '*.deb' -o \
+            -name '*.rpm' -o \
+            -name '*.iso' -o \
+            -name '*.CREDENTIALS.txt' \
+          \) -exec cp {} release/ \;
+          ls -la release/
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: true

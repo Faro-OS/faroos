@@ -25,7 +25,10 @@ import (
 	"github.com/faroos/faroos/internal/termsession"
 )
 
-const version = "0.0.1-dev"
+// version is overridden at release build time via
+// -ldflags "-X main.version=vX.Y.Z" (see .github/workflows/release.yml) —
+// has to be a var, not a const, for -X to be able to touch it.
+var version = "0.0.1-dev"
 
 // deps bundles the agent's local capabilities so they can be threaded
 // through the command dispatcher without an ever-growing parameter list.

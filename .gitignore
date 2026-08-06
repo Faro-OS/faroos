@@ -10,6 +10,13 @@ web/node_modules/
 web/.svelte-kit/
 web/build/
 
+# Real frontend builds land in internal/webui/dist/ (go:embed'd into
+# cmd/server) — ignore everything a real build generates there except the
+# tracked placeholder index.html that keeps `go build` working before the
+# frontend has ever been built.
+internal/webui/dist/*
+!internal/webui/dist/index.html
+
 # Tauri / Rust
 desktop/src-tauri/target/
 desktop/node_modules/

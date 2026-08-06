@@ -12,8 +12,12 @@ export default defineConfig({
 				runes: ({ filename }) => filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 			adapter: adapter({
-				pages: 'build',
-				assets: 'build',
+				// Output straight into the Go module so cmd/server can
+				// go:embed it (see internal/webui) — the binary ships with
+				// its own UI rather than needing web/build shipped
+				// separately alongside it at the right relative path.
+				pages: '../internal/webui/dist',
+				assets: '../internal/webui/dist',
 				fallback: 'index.html',
 				precompress: false,
 				strict: true

@@ -11,7 +11,12 @@ import (
 	"github.com/faroos/faroos/internal/api"
 	"github.com/faroos/faroos/internal/auth"
 	"github.com/faroos/faroos/internal/registry"
+	"github.com/faroos/faroos/internal/webui"
 )
+
+// version is overridden at release build time via
+// -ldflags "-X main.version=vX.Y.Z" (see .github/workflows/release.yml).
+var version = "0.0.1-dev"
 
 func main() {
 	port := os.Getenv("FAROOS_PORT")
@@ -44,25 +49,11 @@ func main() {
 
 	mux := http.NewServeMux()
 	srv.Routes(mux)
-	mux.Handle("/", staticOrPlaceholder())
+	mux.Handle("/", http.FileServer(http.FS(webui.FS())))
 
 	addr := ":" + port
-	log.Printf("FaroOS server listening on %s (db: %s)", addr, dbPath)
+	log.Printf("FaroOS server %s listening on %s (db: %s)", version, addr, dbPath)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal(err)
 	}
-}
-
-// staticOrPlaceholder serves the built SvelteKit app from web/build if it
-// exists, otherwise a placeholder so `go run` is useful before the frontend
-// is built.
-func staticOrPlaceholder() http.Handler {
-	const webDir = "web/build"
-	if info, err := os.Stat(webDir); err == nil && info.IsDir() {
-		return http.FileServer(http.Dir(webDir))
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte("FaroOS server is running. Web UI not built yet — see web/README.md.\n"))
-	})
 }
