@@ -31,12 +31,38 @@ export interface PairingResult {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
 	const res = await fetch(`${API_BASE}${path}`, {
 		headers: { 'Content-Type': 'application/json' },
+		credentials: 'include',
 		...init
 	});
+	if (res.status === 401 && !path.startsWith('/api/auth') && typeof window !== 'undefined') {
+		const { goto } = await import('$app/navigation');
+		await goto('/login');
+	}
 	if (!res.ok) {
 		throw new Error(`${init?.method ?? 'GET'} ${path} failed: ${res.status}`);
 	}
 	return res.json() as Promise<T>;
+}
+
+export interface AuthStatus {
+	needsSetup: boolean;
+	authenticated: boolean;
+}
+
+export function authStatus(): Promise<AuthStatus> {
+	return request<AuthStatus>('/api/auth/status');
+}
+
+export function setupAdmin(username: string, password: string): Promise<{ ok: boolean }> {
+	return request('/api/auth/setup', { method: 'POST', body: JSON.stringify({ username, password }) });
+}
+
+export function login(username: string, password: string): Promise<{ ok: boolean }> {
+	return request('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
+}
+
+export function logout(): Promise<{ ok: boolean }> {
+	return request('/api/auth/logout', { method: 'POST' });
 }
 
 export function listNodes(): Promise<Node[]> {

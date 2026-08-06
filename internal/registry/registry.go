@@ -1,16 +1,18 @@
-// Package registry holds the in-memory set of paired nodes.
-//
-// This is deliberately minimal for the MVP: no persistence yet. Restarting
-// the server currently forgets paired nodes and they need to re-pair. That's
-// a known gap, tracked for whoever picks up storage/persistence next.
+// Package registry holds the set of paired nodes, persisted to a local
+// SQLite file so restarting the server doesn't forget them. Uses
+// modernc.org/sqlite (pure Go, no CGO) to keep static binaries and
+// cross-compilation simple.
 package registry
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
-	"sync"
 	"time"
+
+	_ "modernc.org/sqlite"
 
 	"github.com/faroos/faroos/internal/model"
 )
@@ -19,12 +21,46 @@ var ErrNotFound = errors.New("node not found")
 var ErrBadToken = errors.New("invalid pairing token")
 
 type Registry struct {
-	mu    sync.RWMutex
-	nodes map[string]*model.Node
+	db *sql.DB
 }
 
-func New() *Registry {
-	return &Registry{nodes: make(map[string]*model.Node)}
+// Open opens (creating if needed) the SQLite database at path and ensures
+// the schema exists.
+func Open(path string) (*Registry, error) {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, err
+	}
+	// SQLite handles one writer at a time; avoid "database is locked" churn
+	// under our light concurrent access pattern.
+	db.SetMaxOpenConns(1)
+
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS nodes (
+			id         TEXT PRIMARY KEY,
+			name       TEXT NOT NULL,
+			token      TEXT NOT NULL,
+			connected  INTEGER NOT NULL DEFAULT 0,
+			paired_at  TEXT NOT NULL,
+			last_seen  TEXT,
+			stats_json TEXT
+		)
+	`); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	return &Registry{db: db}, nil
+}
+
+func (r *Registry) Close() error {
+	return r.db.Close()
+}
+
+// DB exposes the underlying connection so other packages (e.g. auth) can
+// share the same SQLite file instead of opening a second one.
+func (r *Registry) DB() *sql.DB {
+	return r.db
 }
 
 // CreatePairing issues a new node ID + long-lived token pair. The admin
@@ -44,19 +80,21 @@ func (r *Registry) CreatePairing(name string) (*model.Node, error) {
 		Token:    token,
 		PairedAt: time.Now(),
 	}
-	r.mu.Lock()
-	r.nodes[id] = n
-	r.mu.Unlock()
+	_, err = r.db.Exec(
+		`INSERT INTO nodes (id, name, token, connected, paired_at) VALUES (?, ?, ?, 0, ?)`,
+		n.ID, n.Name, n.Token, n.PairedAt.Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return nil, err
+	}
 	return n, nil
 }
 
 // Authenticate checks a node ID + token pair presented by a connecting agent.
 func (r *Registry) Authenticate(id, token string) (*model.Node, error) {
-	r.mu.RLock()
-	n, ok := r.nodes[id]
-	r.mu.RUnlock()
-	if !ok {
-		return nil, ErrNotFound
+	n, err := r.Get(id)
+	if err != nil {
+		return nil, err
 	}
 	if n.Token != token {
 		return nil, ErrBadToken
@@ -65,43 +103,89 @@ func (r *Registry) Authenticate(id, token string) (*model.Node, error) {
 }
 
 func (r *Registry) SetConnected(id string, connected bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if n, ok := r.nodes[id]; ok {
-		n.Connected = connected
-		n.LastSeen = time.Now()
-	}
+	r.db.Exec(
+		`UPDATE nodes SET connected = ?, last_seen = ? WHERE id = ?`,
+		boolToInt(connected), time.Now().Format(time.RFC3339Nano), id,
+	)
 }
 
 func (r *Registry) UpdateStats(id string, s model.Stats) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if n, ok := r.nodes[id]; ok {
-		n.Stats = s
-		n.LastSeen = time.Now()
+	statsJSON, err := json.Marshal(s)
+	if err != nil {
+		return
 	}
+	r.db.Exec(
+		`UPDATE nodes SET stats_json = ?, last_seen = ? WHERE id = ?`,
+		string(statsJSON), time.Now().Format(time.RFC3339Nano), id,
+	)
 }
 
 func (r *Registry) List() []*model.Node {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make([]*model.Node, 0, len(r.nodes))
-	for _, n := range r.nodes {
-		cp := *n
-		out = append(out, &cp)
+	rows, err := r.db.Query(`SELECT id, name, token, connected, paired_at, last_seen, stats_json FROM nodes ORDER BY paired_at ASC`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	out := []*model.Node{}
+	for rows.Next() {
+		n, err := scanNode(rows)
+		if err != nil {
+			continue
+		}
+		out = append(out, n)
 	}
 	return out
 }
 
 func (r *Registry) Get(id string) (*model.Node, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	n, ok := r.nodes[id]
-	if !ok {
+	row := r.db.QueryRow(`SELECT id, name, token, connected, paired_at, last_seen, stats_json FROM nodes WHERE id = ?`, id)
+	n, err := scanNode(row)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
-	cp := *n
-	return &cp, nil
+	if err != nil {
+		return nil, err
+	}
+	return n, nil
+}
+
+// rowScanner covers both *sql.Row and *sql.Rows.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanNode(row rowScanner) (*model.Node, error) {
+	var (
+		n            model.Node
+		connectedInt int
+		pairedAt     string
+		lastSeen     sql.NullString
+		statsJSON    sql.NullString
+	)
+	if err := row.Scan(&n.ID, &n.Name, &n.Token, &connectedInt, &pairedAt, &lastSeen, &statsJSON); err != nil {
+		return nil, err
+	}
+	n.Connected = connectedInt != 0
+	if t, err := time.Parse(time.RFC3339Nano, pairedAt); err == nil {
+		n.PairedAt = t
+	}
+	if lastSeen.Valid {
+		if t, err := time.Parse(time.RFC3339Nano, lastSeen.String); err == nil {
+			n.LastSeen = t
+		}
+	}
+	if statsJSON.Valid {
+		json.Unmarshal([]byte(statsJSON.String), &n.Stats)
+	}
+	return &n, nil
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func randomHex(n int) (string, error) {

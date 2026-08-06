@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/faroos/faroos/internal/auth"
 	"github.com/faroos/faroos/internal/proto"
 	"github.com/faroos/faroos/internal/registry"
 	"github.com/gorilla/websocket"
@@ -14,12 +15,14 @@ import (
 
 type Server struct {
 	reg      *registry.Registry
+	authSvc  *auth.Auth
 	upgrader websocket.Upgrader
 }
 
-func New(reg *registry.Registry) *Server {
+func New(reg *registry.Registry, authSvc *auth.Auth) *Server {
 	return &Server{
-		reg: reg,
+		reg:     reg,
+		authSvc: authSvc,
 		upgrader: websocket.Upgrader{
 			// Agents and the web UI are both first-party; origin checking
 			// matters once this is exposed beyond localhost/dev.
@@ -29,9 +32,18 @@ func New(reg *registry.Registry) *Server {
 }
 
 func (s *Server) Routes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/nodes", s.handleCreatePairing)
-	mux.HandleFunc("GET /api/nodes", s.handleListNodes)
-	mux.HandleFunc("GET /api/nodes/{id}", s.handleGetNode)
+	mux.HandleFunc("GET /api/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("POST /api/auth/setup", s.handleAuthSetup)
+	mux.HandleFunc("POST /api/auth/login", s.handleAuthLogin)
+	mux.HandleFunc("POST /api/auth/logout", s.handleAuthLogout)
+
+	mux.HandleFunc("POST /api/nodes", s.requireAuth(s.handleCreatePairing))
+	mux.HandleFunc("GET /api/nodes", s.requireAuth(s.handleListNodes))
+	mux.HandleFunc("GET /api/nodes/{id}", s.requireAuth(s.handleGetNode))
+
+	// Agents authenticate with their own pairing token inside the hello
+	// message, not with an admin session — this endpoint is intentionally
+	// outside requireAuth.
 	mux.HandleFunc("GET /api/agent/connect", s.handleAgentConnect)
 }
 

@@ -3,13 +3,37 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import { getTheme } from '$lib/theme.svelte';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { authStatus } from '$lib/api';
 
 	let { children } = $props();
+
+	let authChecked = $state(false);
+	let authenticated = $state(false);
+
+	const isLoginRoute = $derived(page.url.pathname === '/login');
 
 	$effect(() => {
 		if (typeof document !== 'undefined') {
 			document.documentElement.dataset.theme = getTheme();
 		}
+	});
+
+	$effect(() => {
+		(async () => {
+			try {
+				const status = await authStatus();
+				authenticated = status.authenticated;
+				if (!status.authenticated && page.url.pathname !== '/login') {
+					await goto('/login');
+				}
+			} catch {
+				authenticated = false;
+			} finally {
+				authChecked = true;
+			}
+		})();
 	});
 </script>
 
@@ -18,9 +42,17 @@
 	<title>FaroOS</title>
 </svelte:head>
 
-<div class="flex h-screen w-screen overflow-hidden">
-	<Sidebar />
-	<div class="flex flex-1 flex-col overflow-y-auto">
-		{@render children()}
+{#if isLoginRoute}
+	{@render children()}
+{:else if !authChecked}
+	<div class="grid h-screen w-screen place-items-center bg-[var(--bg)]">
+		<p class="text-[var(--fg-subtle)]">Loading…</p>
 	</div>
-</div>
+{:else if authenticated}
+	<div class="flex h-screen w-screen overflow-hidden">
+		<Sidebar />
+		<div class="flex flex-1 flex-col overflow-y-auto">
+			{@render children()}
+		</div>
+	</div>
+{/if}

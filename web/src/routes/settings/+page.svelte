@@ -1,6 +1,19 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import TopBar from '$lib/components/TopBar.svelte';
 	import { getTheme, toggleTheme } from '$lib/theme.svelte';
+	import { logout } from '$lib/api';
+
+	let loggingOut = $state(false);
+
+	async function handleLogout() {
+		loggingOut = true;
+		try {
+			await logout();
+		} finally {
+			await goto('/login');
+		}
+	}
 </script>
 
 <TopBar title="Settings" />
@@ -46,6 +59,21 @@
 				<a href="#" class="shrink-0 text-sm font-semibold text-[var(--accent)] hover:underline">
 					GitHub repository
 				</a>
+			</div>
+		</section>
+
+		<section class="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+			<h2 class="font-semibold text-[var(--fg)]">Session</h2>
+			<div class="mt-4 flex items-center justify-between gap-6">
+				<p class="text-sm text-[var(--fg-muted)]">Sign out of this admin session on this device.</p>
+				<button
+					type="button"
+					onclick={handleLogout}
+					disabled={loggingOut}
+					class="shrink-0 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--fg)] transition-colors hover:bg-[var(--track)] disabled:opacity-50"
+				>
+					{loggingOut ? 'Signing out…' : 'Sign out'}
+				</button>
 			</div>
 		</section>
 	</div>
