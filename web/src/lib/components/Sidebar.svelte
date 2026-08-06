@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { closeSidebar, isSidebarOpen } from '$lib/sidebar.svelte';
 
 	const items = [
 		{ href: '/', label: 'Dashboard', icon: 'M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z' },
@@ -11,9 +12,27 @@
 		{ href: '/files', label: 'Files', icon: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z' },
 		{ href: '/settings', label: 'Settings', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7-3c0 .34-.02.67-.06 1l2.11 1.65-2 3.46-2.49-1a7.4 7.4 0 0 1-1.73 1L14.5 21h-5l-.33-2.89a7.4 7.4 0 0 1-1.73-1l-2.49 1-2-3.46L4.06 13A7.6 7.6 0 0 1 4 12c0-.34.02-.67.06-1L1.95 9.35l2-3.46 2.49 1c.53-.42 1.11-.76 1.73-1L8.5 3h5l.33 2.89c.62.24 1.2.58 1.73 1l2.49-1 2 3.46L17.94 11c.04.33.06.66.06 1Z' }
 	];
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') closeSidebar();
+	}
 </script>
 
-<aside class="flex w-56 shrink-0 flex-col gap-1 border-r border-[var(--border)] bg-[var(--sidebar-bg)] p-3">
+<svelte:window onkeydown={handleKeydown} />
+
+{#if isSidebarOpen()}
+	<button
+		type="button"
+		aria-label="Close menu"
+		onclick={closeSidebar}
+		class="fixed inset-0 z-40 bg-black/40 md:hidden"
+	></button>
+{/if}
+
+<aside
+	class="fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 -translate-x-full flex-col gap-1 border-r border-[var(--border)] bg-[var(--sidebar-bg)] p-3 transition-transform duration-200 md:static md:w-56 md:translate-x-0
+		{isSidebarOpen() ? 'translate-x-0' : ''}"
+>
 	<div class="mb-4 flex items-center gap-2 px-2 pt-1">
 		<span class="grid h-8 w-8 place-items-center rounded-xl bg-[var(--accent)] text-[var(--accent-fg)]">
 			<svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
@@ -27,6 +46,7 @@
 	{#each items as item (item.href)}
 		<a
 			href={item.href}
+			onclick={closeSidebar}
 			class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors
 				{page.url.pathname === item.href
 				? 'bg-[var(--accent)]/12 text-[var(--accent)]'

@@ -10,6 +10,7 @@
 		type Container,
 		type Node
 	} from '$lib/api';
+	import { toastError, toastSuccess } from '$lib/toast.svelte';
 
 	let nodes = $state<Node[]>([]);
 	let selectedNodeId = $state<string | null>(null);
@@ -74,8 +75,11 @@
 		try {
 			await deployApp(selectedNodeId, app.id);
 			await loadContainers();
+			toastSuccess(`${app.name} deployed`);
 		} catch (err) {
-			error = err instanceof Error ? err.message : `Failed to deploy ${app.name}`;
+			const message = err instanceof Error ? err.message : `Failed to deploy ${app.name}`;
+			error = message;
+			toastError(message);
 		} finally {
 			busyAppId = null;
 		}
@@ -89,8 +93,11 @@
 		try {
 			await removeApp(selectedNodeId, app.id);
 			await loadContainers();
+			toastSuccess(`${app.name} removed`);
 		} catch (err) {
-			error = err instanceof Error ? err.message : `Failed to remove ${app.name}`;
+			const message = err instanceof Error ? err.message : `Failed to remove ${app.name}`;
+			error = message;
+			toastError(message);
 		} finally {
 			busyAppId = null;
 		}

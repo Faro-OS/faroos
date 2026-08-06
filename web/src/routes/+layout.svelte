@@ -2,6 +2,7 @@
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import Sidebar from '$lib/components/Sidebar.svelte';
+	import ToastHost from '$lib/components/ToastHost.svelte';
 	import { getTheme } from '$lib/theme.svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -42,6 +43,8 @@
 	<title>FaroOS</title>
 </svelte:head>
 
+<ToastHost />
+
 {#if isLoginRoute}
 	{@render children()}
 {:else if !authChecked}
@@ -51,7 +54,7 @@
 {:else if authenticated}
 	<div class="flex h-screen w-screen overflow-hidden">
 		<Sidebar />
-		<div class="flex flex-1 flex-col overflow-y-auto">
+		<div class="flex min-w-0 flex-1 flex-col overflow-y-auto">
 			{@render children()}
 		</div>
 	</div>

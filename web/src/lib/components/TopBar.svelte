@@ -1,12 +1,24 @@
 <script lang="ts">
 	import { getTheme, toggleTheme } from '$lib/theme.svelte';
+	import { toggleSidebar } from '$lib/sidebar.svelte';
 
 	let { title, children }: { title: string; children?: import('svelte').Snippet } = $props();
 </script>
 
-<header class="flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg)] px-6 py-4">
-	<h1 class="text-xl font-semibold text-[var(--fg)]">{title}</h1>
-	<div class="flex items-center gap-3">
+<header class="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg)] px-4 py-4 sm:px-6">
+	<div class="flex min-w-0 items-center gap-3">
+		<button
+			onclick={toggleSidebar}
+			aria-label="Toggle menu"
+			class="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--fg-muted)] hover:text-[var(--fg)] md:hidden"
+		>
+			<svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
+			</svg>
+		</button>
+		<h1 class="truncate text-xl font-semibold text-[var(--fg)]">{title}</h1>
+	</div>
+	<div class="flex shrink-0 items-center gap-3">
 		{@render children?.()}
 		<button
 			onclick={toggleTheme}

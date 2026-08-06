@@ -10,6 +10,7 @@
 		type FileEntry,
 		type Node
 	} from '$lib/api';
+	import { toastError, toastSuccess } from '$lib/toast.svelte';
 
 	let nodes = $state<Node[]>([]);
 	let selectedNodeId = $state<string | null>(null);
@@ -92,8 +93,11 @@
 		try {
 			await deleteFile(selectedNodeId, joinPath(currentPath, entry.name));
 			await loadEntries();
+			toastSuccess(`${entry.name} deleted`);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to delete';
+			const message = err instanceof Error ? err.message : 'Failed to delete';
+			error = message;
+			toastError(message);
 		}
 	}
 
@@ -106,8 +110,11 @@
 		try {
 			await uploadFile(selectedNodeId, joinPath(currentPath, file.name), file);
 			await loadEntries();
+			toastSuccess(`${file.name} uploaded`);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Upload failed';
+			const message = err instanceof Error ? err.message : 'Upload failed';
+			error = message;
+			toastError(message);
 		} finally {
 			uploading = false;
 			input.value = '';

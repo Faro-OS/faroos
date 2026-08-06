@@ -9,6 +9,7 @@
 		type ContainerAction,
 		type Node
 	} from '$lib/api';
+	import { toastError, toastSuccess } from '$lib/toast.svelte';
 
 	let nodes = $state<Node[]>([]);
 	let selectedNodeId = $state<string | null>(null);
@@ -70,8 +71,11 @@
 		try {
 			await containerAction(selectedNodeId, c.id, action);
 			await loadContainers();
+			toastSuccess(`${containerName(c)} ${action === 'stop' ? 'stopped' : action === 'start' ? 'started' : 'restarted'}`);
 		} catch (err) {
-			error = err instanceof Error ? err.message : `Failed to ${action} container`;
+			const message = err instanceof Error ? err.message : `Failed to ${action} container`;
+			error = message;
+			toastError(message);
 		} finally {
 			actingOn = null;
 		}
@@ -91,7 +95,13 @@
 			logsLoading = false;
 		}
 	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && logsFor) logsFor = null;
+	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <TopBar title="Containers">
 	{#if connectedNodes.length > 0}

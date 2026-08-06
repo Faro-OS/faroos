@@ -2,6 +2,7 @@
 	import TopBar from '$lib/components/TopBar.svelte';
 	import NodeCard from '$lib/components/NodeCard.svelte';
 	import { createPairing, listNodes, type Node, type PairingResult } from '$lib/api';
+	import { toastError } from '$lib/toast.svelte';
 
 	let nodes = $state<Node[]>([]);
 	let loadError = $state<string | null>(null);
@@ -33,7 +34,9 @@
 			pairingResult = await createPairing(newNodeName.trim());
 			refresh();
 		} catch (err) {
-			loadError = err instanceof Error ? err.message : 'Failed to create pairing';
+			const message = err instanceof Error ? err.message : 'Failed to create pairing';
+			loadError = message;
+			toastError(message);
 		} finally {
 			pairing = false;
 		}
@@ -44,7 +47,13 @@
 		newNodeName = '';
 		pairingResult = null;
 	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && showPairModal) closeModal();
+	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <TopBar title="Dashboard">
 	<button
