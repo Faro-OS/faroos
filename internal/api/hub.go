@@ -34,10 +34,20 @@ type agentConn struct {
 
 	pendingMu sync.Mutex
 	pending   map[string]chan proto.CommandResult
+
+	// streams carries terminal_output/terminal_close envelopes for
+	// long-lived PTY sessions, keyed by session ID — unlike pending
+	// (request/response), a stream stays open across many messages.
+	streamsMu sync.Mutex
+	streams   map[string]chan proto.Envelope
 }
 
 func (h *hub) register(nodeID string, conn *websocket.Conn) *agentConn {
-	ac := &agentConn{conn: conn, pending: make(map[string]chan proto.CommandResult)}
+	ac := &agentConn{
+		conn:    conn,
+		pending: make(map[string]chan proto.CommandResult),
+		streams: make(map[string]chan proto.Envelope),
+	}
 	h.mu.Lock()
 	h.conns[nodeID] = ac
 	h.mu.Unlock()
@@ -57,6 +67,13 @@ func (h *hub) unregister(nodeID string, ac *agentConn) {
 		delete(ac.pending, id)
 	}
 	ac.pendingMu.Unlock()
+
+	ac.streamsMu.Lock()
+	for id, ch := range ac.streams {
+		close(ch)
+		delete(ac.streams, id)
+	}
+	ac.streamsMu.Unlock()
 }
 
 func (h *hub) get(nodeID string) (*agentConn, bool) {
@@ -106,5 +123,53 @@ func (ac *agentConn) resolve(result proto.CommandResult) {
 	ac.pendingMu.Unlock()
 	if ok {
 		ch <- result
+	}
+}
+
+// writeEnvelope sends a raw envelope to the agent without expecting a
+// correlated reply — used for one-way terminal control messages.
+func (ac *agentConn) writeEnvelope(env proto.Envelope) error {
+	ac.writeMu.Lock()
+	defer ac.writeMu.Unlock()
+	return ac.conn.WriteJSON(env)
+}
+
+// openStream registers a channel that will receive every terminal_output /
+// terminal_close envelope for the given session ID until closeStream is
+// called (or the agent disconnects).
+func (ac *agentConn) openStream(sessionID string) chan proto.Envelope {
+	ch := make(chan proto.Envelope, 32)
+	ac.streamsMu.Lock()
+	ac.streams[sessionID] = ch
+	ac.streamsMu.Unlock()
+	return ch
+}
+
+func (ac *agentConn) closeStream(sessionID string) {
+	ac.streamsMu.Lock()
+	if ch, ok := ac.streams[sessionID]; ok {
+		close(ch)
+		delete(ac.streams, sessionID)
+	}
+	ac.streamsMu.Unlock()
+}
+
+// dispatchStream delivers a terminal envelope to its session's channel, if
+// still open. Non-blocking: a slow/gone reader shouldn't stall the agent's
+// single read loop. Guards against the inherent race between looking up
+// the channel and closeStream closing it concurrently — a send on a
+// closed channel would otherwise panic and take down the whole process,
+// since this runs in the connection's read-loop goroutine.
+func (ac *agentConn) dispatchStream(sessionID string, env proto.Envelope) {
+	ac.streamsMu.Lock()
+	ch, ok := ac.streams[sessionID]
+	ac.streamsMu.Unlock()
+	if !ok {
+		return
+	}
+	defer func() { recover() }()
+	select {
+	case ch <- env:
+	default:
 	}
 }

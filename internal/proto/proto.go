@@ -17,6 +17,15 @@ const (
 	TypePong          MessageType = "pong"
 	TypeCommand       MessageType = "command"        // server -> agent
 	TypeCommandResult MessageType = "command_result" // agent -> server
+
+	// Terminal messages implement a persistent PTY session multiplexed over
+	// the single agent websocket by SessionID — unlike Command/CommandResult
+	// these are streaming, not request/response.
+	TypeTerminalOpen   MessageType = "terminal_open"   // server -> agent
+	TypeTerminalInput  MessageType = "terminal_input"  // server -> agent
+	TypeTerminalResize MessageType = "terminal_resize" // server -> agent
+	TypeTerminalOutput MessageType = "terminal_output" // agent -> server
+	TypeTerminalClose  MessageType = "terminal_close"  // either direction
 )
 
 // Envelope wraps every message sent over the websocket. Payload is decoded
@@ -27,6 +36,37 @@ type Envelope struct {
 	Stats         *model.Stats   `json:"stats,omitempty"`
 	Command       *Command       `json:"command,omitempty"`
 	CommandResult *CommandResult `json:"commandResult,omitempty"`
+
+	TerminalOpen   *TerminalOpen   `json:"terminalOpen,omitempty"`
+	TerminalData   *TerminalData   `json:"terminalData,omitempty"`
+	TerminalResize *TerminalResize `json:"terminalResize,omitempty"`
+	TerminalClose  *TerminalClose  `json:"terminalClose,omitempty"`
+}
+
+// TerminalOpen asks the agent to spawn a new shell PTY.
+type TerminalOpen struct {
+	SessionID string `json:"sessionId"`
+	Cols      int    `json:"cols"`
+	Rows      int    `json:"rows"`
+}
+
+// TerminalData carries a chunk of terminal bytes in either direction
+// (keystrokes going to the agent, output coming back), base64-encoded so
+// arbitrary bytes survive JSON.
+type TerminalData struct {
+	SessionID string `json:"sessionId"`
+	DataB64   string `json:"dataB64"`
+}
+
+type TerminalResize struct {
+	SessionID string `json:"sessionId"`
+	Cols      int    `json:"cols"`
+	Rows      int    `json:"rows"`
+}
+
+type TerminalClose struct {
+	SessionID string `json:"sessionId"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 // Hello is sent once by the agent right after connecting, identifying

@@ -49,6 +49,8 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/nodes/{id}/containers/{cid}/restart", s.requireAuth(s.handleContainerAction("restart")))
 	mux.HandleFunc("GET /api/nodes/{id}/containers/{cid}/logs", s.requireAuth(s.handleContainerLogs))
 
+	mux.HandleFunc("GET /api/nodes/{id}/terminal", s.requireAuth(s.handleTerminal))
+
 	// Agents authenticate with their own pairing token inside the hello
 	// message, not with an admin session — this endpoint is intentionally
 	// outside requireAuth.
@@ -139,6 +141,14 @@ func (s *Server) handleAgentConnect(w http.ResponseWriter, r *http.Request) {
 		case proto.TypeCommandResult:
 			if msg.CommandResult != nil {
 				ac.resolve(*msg.CommandResult)
+			}
+		case proto.TypeTerminalOutput:
+			if msg.TerminalData != nil {
+				ac.dispatchStream(msg.TerminalData.SessionID, msg)
+			}
+		case proto.TypeTerminalClose:
+			if msg.TerminalClose != nil {
+				ac.dispatchStream(msg.TerminalClose.SessionID, msg)
 			}
 		}
 	}

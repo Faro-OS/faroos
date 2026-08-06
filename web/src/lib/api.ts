@@ -106,3 +106,10 @@ export function containerAction(nodeId: string, containerId: string, action: Con
 export function containerLogs(nodeId: string, containerId: string, tail = 200): Promise<{ logs: string }> {
 	return request(`/api/nodes/${nodeId}/containers/${containerId}/logs?tail=${tail}`);
 }
+
+export function terminalWsUrl(nodeId: string, cols: number, rows: number): string {
+	const origin =
+		API_BASE || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8090');
+	const wsBase = origin.replace(/^http/, 'ws');
+	return `${wsBase}/api/nodes/${nodeId}/terminal?cols=${cols}&rows=${rows}`;
+}

@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/faroos/faroos/internal/dockerclient"
 	"github.com/faroos/faroos/internal/proto"
 	"github.com/faroos/faroos/internal/sysstats"
+	"github.com/faroos/faroos/internal/termsession"
 )
 
 const version = "0.0.1-dev"
@@ -31,16 +33,17 @@ func main() {
 		dockerSocket = "/var/run/docker.sock"
 	}
 	docker := dockerclient.New(dockerSocket)
+	terminals := termsession.NewManager()
 
 	for {
-		if err := runOnce(serverURL, nodeID, token, docker); err != nil {
+		if err := runOnce(serverURL, nodeID, token, docker, terminals); err != nil {
 			log.Printf("connection lost: %v — reconnecting in 5s", err)
 		}
 		time.Sleep(5 * time.Second)
 	}
 }
 
-func runOnce(serverURL, nodeID, token string, docker *dockerclient.Client) error {
+func runOnce(serverURL, nodeID, token string, docker *dockerclient.Client, terminals *termsession.Manager) error {
 	conn, _, err := websocket.DefaultDialer.Dial(serverURL, nil)
 	if err != nil {
 		return err
@@ -78,10 +81,19 @@ func runOnce(serverURL, nodeID, token string, docker *dockerclient.Client) error
 				errCh <- err
 				return
 			}
-			if env.Type == proto.TypeCommand && env.Command != nil {
+			switch {
+			case env.Type == proto.TypeCommand && env.Command != nil:
 				// Run in its own goroutine so a slow command (e.g. fetching
 				// logs) doesn't stall reading further messages/pings.
 				go handleCommand(docker, *env.Command, writeJSON)
+			case env.Type == proto.TypeTerminalOpen && env.TerminalOpen != nil:
+				handleTerminalOpen(terminals, *env.TerminalOpen, writeJSON)
+			case env.Type == proto.TypeTerminalInput && env.TerminalData != nil:
+				handleTerminalInput(terminals, *env.TerminalData)
+			case env.Type == proto.TypeTerminalResize && env.TerminalResize != nil:
+				terminals.Resize(env.TerminalResize.SessionID, env.TerminalResize.Cols, env.TerminalResize.Rows)
+			case env.Type == proto.TypeTerminalClose && env.TerminalClose != nil:
+				terminals.Close(env.TerminalClose.SessionID)
 			}
 		}
 	}()
@@ -170,6 +182,48 @@ func dispatch(ctx context.Context, docker *dockerclient.Client, cmd proto.Comman
 	default:
 		return nil, unknownActionError(cmd.Action)
 	}
+}
+
+func handleTerminalOpen(terminals *termsession.Manager, open proto.TerminalOpen, writeJSON func(any) error) {
+	cols, rows := open.Cols, open.Rows
+	if cols <= 0 {
+		cols = 80
+	}
+	if rows <= 0 {
+		rows = 24
+	}
+
+	err := terminals.Open(open.SessionID, cols, rows,
+		func(chunk []byte) {
+			writeJSON(proto.Envelope{
+				Type: proto.TypeTerminalOutput,
+				TerminalData: &proto.TerminalData{
+					SessionID: open.SessionID,
+					DataB64:   base64.StdEncoding.EncodeToString(chunk),
+				},
+			})
+		},
+		func(reason string) {
+			writeJSON(proto.Envelope{
+				Type:          proto.TypeTerminalClose,
+				TerminalClose: &proto.TerminalClose{SessionID: open.SessionID, Reason: reason},
+			})
+		},
+	)
+	if err != nil {
+		writeJSON(proto.Envelope{
+			Type:          proto.TypeTerminalClose,
+			TerminalClose: &proto.TerminalClose{SessionID: open.SessionID, Reason: err.Error()},
+		})
+	}
+}
+
+func handleTerminalInput(terminals *termsession.Manager, data proto.TerminalData) {
+	raw, err := base64.StdEncoding.DecodeString(data.DataB64)
+	if err != nil {
+		return
+	}
+	terminals.Write(data.SessionID, raw)
 }
 
 type unknownActionError string
