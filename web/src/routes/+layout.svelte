@@ -1,7 +1,7 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
-	import Sidebar from '$lib/components/Sidebar.svelte';
+	import IconRail from '$lib/components/IconRail.svelte';
 	import ToastHost from '$lib/components/ToastHost.svelte';
 	import { getTheme } from '$lib/theme.svelte';
 	import { page } from '$app/state';
@@ -52,10 +52,8 @@
 		<p class="text-[var(--fg-subtle)]">Loading…</p>
 	</div>
 {:else if authenticated}
-	<div class="flex h-screen w-screen overflow-hidden">
-		<Sidebar />
-		<div class="flex min-w-0 flex-1 flex-col overflow-y-auto">
-			{@render children()}
-		</div>
+	<IconRail />
+	<div class="h-screen w-screen overflow-y-auto pt-16">
+		{@render children()}
 	</div>
 {/if}

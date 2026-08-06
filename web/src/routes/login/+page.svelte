@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { authStatus, login, setupAdmin } from '$lib/api';
 
 	let checking = $state(true);
@@ -15,7 +14,11 @@
 			try {
 				const status = await authStatus();
 				if (status.authenticated) {
-					await goto('/');
+					// Full reload, not client-side goto: the root layout only
+					// checks auth status once on mount, so a client-side nav
+					// here would leave it stuck thinking we're unauthenticated
+					// (blank page — every branch in its {#if} would be false).
+					window.location.href = '/';
 					return;
 				}
 				needsSetup = status.needsSetup;
@@ -45,7 +48,7 @@
 			} else {
 				await login(username, password);
 			}
-			await goto('/');
+			window.location.href = '/';
 		} catch {
 			error = needsSetup ? 'Could not create the admin account' : 'Invalid username or password';
 		} finally {
