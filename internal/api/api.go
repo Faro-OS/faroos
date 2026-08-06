@@ -16,6 +16,7 @@ import (
 type Server struct {
 	reg      *registry.Registry
 	authSvc  *auth.Auth
+	hub      *hub
 	upgrader websocket.Upgrader
 }
 
@@ -23,6 +24,7 @@ func New(reg *registry.Registry, authSvc *auth.Auth) *Server {
 	return &Server{
 		reg:     reg,
 		authSvc: authSvc,
+		hub:     newHub(),
 		upgrader: websocket.Upgrader{
 			// Agents and the web UI are both first-party; origin checking
 			// matters once this is exposed beyond localhost/dev.
@@ -40,6 +42,12 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/nodes", s.requireAuth(s.handleCreatePairing))
 	mux.HandleFunc("GET /api/nodes", s.requireAuth(s.handleListNodes))
 	mux.HandleFunc("GET /api/nodes/{id}", s.requireAuth(s.handleGetNode))
+
+	mux.HandleFunc("GET /api/nodes/{id}/containers", s.requireAuth(s.handleListContainers))
+	mux.HandleFunc("POST /api/nodes/{id}/containers/{cid}/start", s.requireAuth(s.handleContainerAction("start")))
+	mux.HandleFunc("POST /api/nodes/{id}/containers/{cid}/stop", s.requireAuth(s.handleContainerAction("stop")))
+	mux.HandleFunc("POST /api/nodes/{id}/containers/{cid}/restart", s.requireAuth(s.handleContainerAction("restart")))
+	mux.HandleFunc("GET /api/nodes/{id}/containers/{cid}/logs", s.requireAuth(s.handleContainerLogs))
 
 	// Agents authenticate with their own pairing token inside the hello
 	// message, not with an admin session — this endpoint is intentionally
@@ -107,7 +115,11 @@ func (s *Server) handleAgentConnect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.reg.SetConnected(node.ID, true)
-	defer s.reg.SetConnected(node.ID, false)
+	ac := s.hub.register(node.ID, conn)
+	defer func() {
+		s.reg.SetConnected(node.ID, false)
+		s.hub.unregister(node.ID, ac)
+	}()
 	log.Printf("agent connected: %s (%s)", node.Name, node.ID)
 
 	for {
@@ -124,6 +136,10 @@ func (s *Server) handleAgentConnect(w http.ResponseWriter, r *http.Request) {
 			}
 		case proto.TypePing:
 			conn.WriteJSON(proto.Envelope{Type: proto.TypePong})
+		case proto.TypeCommandResult:
+			if msg.CommandResult != nil {
+				ac.resolve(*msg.CommandResult)
+			}
 		}
 	}
 }

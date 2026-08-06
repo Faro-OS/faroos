@@ -75,3 +75,34 @@ export function createPairing(name: string): Promise<PairingResult> {
 		body: JSON.stringify({ name })
 	});
 }
+
+export interface ContainerPort {
+	privatePort: number;
+	publicPort?: number;
+	type: string;
+}
+
+export interface Container {
+	id: string;
+	names: string[];
+	image: string;
+	state: string;
+	status: string;
+	ports: ContainerPort[];
+	labels: Record<string, string>;
+	created: number;
+}
+
+export function listContainers(nodeId: string): Promise<Container[]> {
+	return request<Container[]>(`/api/nodes/${nodeId}/containers`);
+}
+
+export type ContainerAction = 'start' | 'stop' | 'restart';
+
+export function containerAction(nodeId: string, containerId: string, action: ContainerAction): Promise<{ ok: boolean }> {
+	return request(`/api/nodes/${nodeId}/containers/${containerId}/${action}`, { method: 'POST' });
+}
+
+export function containerLogs(nodeId: string, containerId: string, tail = 200): Promise<{ logs: string }> {
+	return request(`/api/nodes/${nodeId}/containers/${containerId}/logs?tail=${tail}`);
+}
