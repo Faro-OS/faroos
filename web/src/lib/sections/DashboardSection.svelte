@@ -130,7 +130,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div class="min-h-full" style="background: var(--wallpaper);">
-	<div class="mx-auto max-w-6xl px-4 pb-10 pt-6 sm:px-8">
+	<div class="mx-auto max-w-6xl px-4 pb-28 pt-6 sm:px-8">
 		<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
 			<div>
 				<p class="text-3xl font-semibold text-white drop-shadow-sm">

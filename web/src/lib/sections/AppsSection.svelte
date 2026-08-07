@@ -158,7 +158,7 @@
 	</button>
 </TopBar>
 
-<main class="flex-1 p-6">
+<main class="flex-1 p-6 pb-28">
 	{#if error}
 		<div class="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-500">{error}</div>
 	{/if}

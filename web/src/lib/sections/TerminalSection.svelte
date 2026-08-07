@@ -180,7 +180,7 @@
 	{/if}
 </TopBar>
 
-<main class="flex flex-1 flex-col p-6">
+<main class="flex flex-1 flex-col p-6 pb-28">
 	{#if connectedNodes.length === 0}
 		<div class="grid flex-1 place-items-center rounded-2xl border border-dashed border-[var(--border)] text-center">
 			<p class="text-[var(--fg-muted)]">No connected servers yet.</p>

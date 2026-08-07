@@ -52,7 +52,7 @@
 		<p class="text-[var(--fg-subtle)]">Loading…</p>
 	</div>
 {:else if authenticated}
-	<div class="h-screen w-screen overflow-y-auto pb-24">
+	<div class="h-screen w-screen overflow-y-auto">
 		{@render children()}
 	</div>
 	<Dock />

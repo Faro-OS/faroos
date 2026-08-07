@@ -18,7 +18,7 @@
 
 <TopBar title="Settings" />
 
-<main class="flex-1 p-6">
+<main class="flex-1 p-6 pb-28">
 	<div class="mx-auto flex max-w-3xl flex-col gap-4">
 		<section class="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
 			<div class="flex items-center justify-between gap-6">
