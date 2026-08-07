@@ -55,3 +55,19 @@ body {
 	background: var(--bg);
 	color: var(--fg);
 }
+
+body {
+	font-family:
+		-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Inter', system-ui,
+		'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+}
+
+/* A calmer default easing for anything using Tailwind's transition
+   utilities, closer to macOS's own motion curves than the linear/ease
+   defaults. */
+* {
+	transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}

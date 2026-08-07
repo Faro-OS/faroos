@@ -64,6 +64,7 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/apps/refresh", s.requireAuth(s.handleRefreshApps))
 	mux.HandleFunc("POST /api/nodes/{id}/apps/{appId}/deploy", s.requireAuth(s.handleDeployApp))
 	mux.HandleFunc("POST /api/nodes/{id}/apps/{appId}/remove", s.requireAuth(s.handleRemoveApp))
+	mux.HandleFunc("GET /api/nodes/{id}/ports/{port}", s.requireAuth(s.handleInspectPort))
 
 	// Agents authenticate with their own pairing token inside the hello
 	// message, not with an admin session — this endpoint is intentionally

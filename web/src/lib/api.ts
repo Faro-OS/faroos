@@ -187,12 +187,32 @@ export function refreshAppCatalog(): Promise<{ ok: boolean; count: number }> {
 	return request('/api/apps/refresh', { method: 'POST' });
 }
 
-export function deployApp(nodeId: string, appId: string): Promise<{ ok: boolean }> {
-	return request(`/api/nodes/${nodeId}/apps/${appId}/deploy`, { method: 'POST' });
+export interface DeployOverrides {
+	ports: AppPort[];
+	env: AppEnvVar[];
+}
+
+export function deployApp(nodeId: string, appId: string, overrides: DeployOverrides): Promise<{ ok: boolean }> {
+	return request(`/api/nodes/${nodeId}/apps/${appId}/deploy`, {
+		method: 'POST',
+		body: JSON.stringify(overrides)
+	});
 }
 
 export function removeApp(nodeId: string, appId: string): Promise<{ ok: boolean }> {
 	return request(`/api/nodes/${nodeId}/apps/${appId}/remove`, { method: 'POST' });
+}
+
+export interface PortStatus {
+	port: number;
+	inUse: boolean;
+	ownApp: boolean;
+	containerId?: string;
+	containerName?: string;
+}
+
+export function inspectPort(nodeId: string, port: number): Promise<PortStatus> {
+	return request(`/api/nodes/${nodeId}/ports/${port}`);
 }
 
 export function terminalWsUrl(nodeId: string, cols: number, rows: number): string {

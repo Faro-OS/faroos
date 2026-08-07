@@ -1,7 +1,7 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '$lib/assets/logo.png';
-	import IconRail from '$lib/components/IconRail.svelte';
+	import Dock from '$lib/components/Dock.svelte';
 	import ToastHost from '$lib/components/ToastHost.svelte';
 	import { getTheme } from '$lib/theme.svelte';
 	import { page } from '$app/state';
@@ -52,8 +52,8 @@
 		<p class="text-[var(--fg-subtle)]">Loading…</p>
 	</div>
 {:else if authenticated}
-	<IconRail />
-	<div class="h-screen w-screen overflow-y-auto pt-16">
+	<div class="h-screen w-screen overflow-y-auto pb-24">
 		{@render children()}
 	</div>
+	<Dock />
 {/if}

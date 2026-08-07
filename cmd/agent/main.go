@@ -10,8 +10,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -291,6 +293,13 @@ func dispatch(ctx context.Context, d *deps, cmd proto.Command) (any, error) {
 		}
 		return nil, removeApp(ctx, d, p.AppID)
 
+	case "ports.inspect":
+		var p portParams
+		if err := json.Unmarshal(cmd.Params, &p); err != nil {
+			return nil, err
+		}
+		return inspectPort(ctx, d, p.Port)
+
 	default:
 		return nil, unknownActionError(cmd.Action)
 	}
@@ -298,6 +307,57 @@ func dispatch(ctx context.Context, d *deps, cmd proto.Command) (any, error) {
 
 type appIDParams struct {
 	AppID string `json:"appId"`
+}
+
+type portParams struct {
+	Port int `json:"port"`
+}
+
+// portStatus reports whether a host port is free, and if not, whether it's
+// a FaroOS-deployed container (which the caller can safely offer to stop)
+// or something else entirely (host process, unrelated container — we
+// deliberately don't try to identify or offer to kill those: this agent
+// runs on a real production machine and guessing wrong about what's safe
+// to kill is exactly the kind of "confidently automated" mistake that
+// takes down an unrelated service).
+type portStatus struct {
+	Port          int    `json:"port"`
+	InUse         bool   `json:"inUse"`
+	OwnApp        bool   `json:"ownApp"`
+	ContainerID   string `json:"containerId,omitempty"`
+	ContainerName string `json:"containerName,omitempty"`
+}
+
+func inspectPort(ctx context.Context, d *deps, port int) (*portStatus, error) {
+	containers, err := d.docker.ListContainers(ctx)
+	if err == nil {
+		for _, c := range containers {
+			for _, p := range c.Ports {
+				if int(p.PublicPort) == port {
+					name := ""
+					if len(c.Names) > 0 {
+						name = strings.TrimPrefix(c.Names[0], "/")
+					}
+					_, isOurs := strings.CutPrefix(name, "faroos-app-")
+					return &portStatus{
+						Port: port, InUse: true, OwnApp: isOurs,
+						ContainerID: c.ID, ContainerName: name,
+					}, nil
+				}
+			}
+		}
+	}
+
+	// Not one of our containers by that published port — fall back to a
+	// direct bind test, which works regardless of what's using it (docker
+	// container we don't recognize, or a plain host process) without
+	// needing root or shelling out to `ss`.
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return &portStatus{Port: port, InUse: true}, nil
+	}
+	ln.Close()
+	return &portStatus{Port: port, InUse: false}, nil
 }
 
 func deployApp(ctx context.Context, d *deps, spec appcatalog.DeploySpec) error {

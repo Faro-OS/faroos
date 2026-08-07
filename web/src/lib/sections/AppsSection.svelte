@@ -1,7 +1,8 @@
 <script lang="ts">
 	import TopBar from '$lib/components/TopBar.svelte';
+	import AppIcon from '$lib/components/AppIcon.svelte';
+	import InstallAppModal from '$lib/components/InstallAppModal.svelte';
 	import {
-		deployApp,
 		listApps,
 		listAppCategories,
 		listContainers,
@@ -25,11 +26,11 @@
 	let refreshing = $state(false);
 	let error = $state<string | null>(null);
 	let busyAppId = $state<string | null>(null);
+	let installTarget = $state<CatalogApp | null>(null);
 
 	let search = $state('');
 	let activeCategory = $state('All');
 	let visibleCount = $state(PAGE_SIZE);
-	let brokenIcons = $state(new Set<string>());
 
 	const connectedNodes = $derived(nodes.filter((n) => n.connected));
 
@@ -112,21 +113,9 @@
 		}
 	}
 
-	async function handleDeploy(app: CatalogApp) {
-		if (!selectedNodeId) return;
-		busyAppId = app.id;
-		error = null;
-		try {
-			await deployApp(selectedNodeId, app.id);
-			await loadContainers();
-			toastSuccess(`${app.name} deployed`);
-		} catch (err) {
-			const message = err instanceof Error ? err.message : `Failed to deploy ${app.name}`;
-			error = message;
-			toastError(message);
-		} finally {
-			busyAppId = null;
-		}
+	function handleInstalled() {
+		installTarget = null;
+		void loadContainers();
 	}
 
 	async function handleRemove(app: CatalogApp) {
@@ -145,14 +134,6 @@
 		} finally {
 			busyAppId = null;
 		}
-	}
-
-	function iconOk(app: CatalogApp): boolean {
-		return !!app.icon && !brokenIcons.has(app.id);
-	}
-
-	function markIconBroken(id: string) {
-		brokenIcons = new Set(brokenIcons).add(id);
 	}
 </script>
 
@@ -233,20 +214,8 @@
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 			{#each visibleApps as app (app.id)}
 				{@const status = selectedNodeId ? statusFor(app.id) : 'not-installed'}
-				<article class="flex gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-					{#if iconOk(app)}
-						<img
-							src={app.icon}
-							alt=""
-							loading="lazy"
-							onerror={() => markIconBroken(app.id)}
-							class="h-14 w-14 shrink-0 rounded-xl object-cover"
-						/>
-					{:else}
-						<div class="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-[var(--track)] text-lg font-semibold text-[var(--accent)]">
-							{app.name.charAt(0)}
-						</div>
-					{/if}
+				<article class="flex gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 transition-shadow hover:shadow-md">
+					<AppIcon name={app.name} icon={app.icon} size={56} />
 
 					<div class="flex min-w-0 flex-1 flex-col">
 						<div class="flex items-start justify-between gap-2">
@@ -263,11 +232,11 @@
 						{#if status === 'not-installed'}
 							<button
 								type="button"
-								onclick={() => handleDeploy(app)}
-								disabled={!selectedNodeId || busyAppId === app.id}
+								onclick={() => (installTarget = app)}
+								disabled={!selectedNodeId}
 								class="mt-3 self-start rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-fg)] disabled:cursor-not-allowed disabled:opacity-50"
 							>
-								{busyAppId === app.id ? 'Deploying…' : 'Install'}
+								Install
 							</button>
 						{:else}
 							<button
@@ -296,3 +265,7 @@
 		{/if}
 	{/if}
 </main>
+
+{#if installTarget && selectedNodeId}
+	<InstallAppModal app={installTarget} nodeId={selectedNodeId} onClose={() => (installTarget = null)} onDeployed={handleInstalled} />
+{/if}

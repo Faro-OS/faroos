@@ -1,5 +1,6 @@
 <script lang="ts">
 	import RadialGauge from '$lib/components/RadialGauge.svelte';
+	import AppIcon from '$lib/components/AppIcon.svelte';
 	import { formatBytes } from '$lib/format';
 	import {
 		createPairing,
@@ -222,13 +223,7 @@
 									rel="noreferrer"
 									class="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/25 p-4 text-center backdrop-blur-md transition-colors hover:bg-black/40"
 								>
-									{#if app.icon}
-										<img src={app.icon} alt="" class="h-12 w-12 rounded-2xl object-cover" />
-									{:else}
-										<span class="grid h-12 w-12 place-items-center rounded-2xl bg-white/90 text-lg font-semibold text-black">
-											{app.name.charAt(0)}
-										</span>
-									{/if}
+									<AppIcon name={app.name} icon={app.icon} size={48} />
 									<span class="line-clamp-2 text-xs font-medium text-white">{app.name}</span>
 									<span class="flex items-center gap-1 text-[10px] text-white/60">
 										<span class="h-1.5 w-1.5 rounded-full {container.state === 'running' ? 'bg-emerald-400' : 'bg-white/40'}"></span>
