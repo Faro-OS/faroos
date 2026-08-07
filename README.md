@@ -31,7 +31,7 @@ desktop/  Tauri wrapper around web/ for native Windows/macOS/Linux apps.
 
 ## Status
 
-Early scaffolding — not usable yet. See `docs/decisions.md` for the architecture decisions made so far.
+Functional end to end: pairing, live stats, Docker container management, a real web terminal, a sandboxed file manager, and an App Store with thousands of one-click-deployable apps (a curated set plus an imported [Unraid Community Applications](https://github.com/Squidly271/AppFeed) catalog, refreshed daily). Still early — expect rough edges. See `docs/decisions.md` for the architecture decisions made so far.
 
 ## License
 
