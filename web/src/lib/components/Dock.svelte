@@ -44,18 +44,18 @@
 	aria-label="FaroOS"
 	onmousemove={handleMouseMove}
 	onmouseleave={resetScales}
-	class="glass-dark fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-end gap-1.5 rounded-[28px] px-2.5 py-2"
+	class="glass-dark fixed bottom-2 left-1/2 z-40 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-end gap-1 overflow-x-auto rounded-[24px] px-2 py-1.5 sm:bottom-4 sm:max-w-[calc(100vw-2rem)] sm:gap-1.5 sm:rounded-[28px] sm:px-2.5 sm:py-2"
 >
-	<span class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white p-1.5 shadow">
+	<span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white p-1 shadow sm:h-11 sm:w-11 sm:rounded-2xl sm:p-1.5">
 		<img src={logo} alt="FaroOS" class="h-full w-full object-contain" />
 	</span>
-	<div class="mx-1 h-8 w-px self-center bg-white/15"></div>
+	<div class="mx-0.5 h-6 w-px shrink-0 self-center bg-white/15 sm:mx-1 sm:h-8"></div>
 
 	{#each items as item, i (item.id)}
-		<div class="relative flex flex-col items-center">
+		<div class="relative flex shrink-0 flex-col items-center">
 			{#if hovered === i}
 				<span
-					class="glass-dark pointer-events-none absolute -top-10 whitespace-nowrap rounded-xl px-2.5 py-1 text-xs font-medium text-white"
+					class="glass-dark pointer-events-none absolute -top-10 hidden whitespace-nowrap rounded-xl px-2.5 py-1 text-xs font-medium text-white sm:block"
 				>
 					{item.label}
 				</span>
@@ -68,32 +68,32 @@
 				onmouseleave={() => (hovered = null)}
 				onclick={() => setSection(item.id)}
 				style="transform: scale({scales[i]}) translateY({(scales[i] - 1) * -14}px);"
-				class="grid h-11 w-11 shrink-0 origin-bottom place-items-center rounded-2xl transition-[background-color,color] duration-150 will-change-transform
+				class="grid h-9 w-9 shrink-0 origin-bottom place-items-center rounded-xl transition-[background-color,color] duration-150 will-change-transform sm:h-11 sm:w-11 sm:rounded-2xl
 					{getSection() === item.id ? 'bg-white text-black' : 'bg-white/10 text-white/85 hover:bg-white/20 hover:text-white'}"
 			>
-				<svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
+				<svg viewBox="0 0 24 24" class="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" stroke-width="2">
 					<path d={item.icon} stroke-linecap="round" stroke-linejoin="round" />
 				</svg>
 			</button>
-			<span class="mt-1 h-1 w-1 rounded-full {getSection() === item.id ? 'bg-white' : 'bg-transparent'}"></span>
+			<span class="mt-1 hidden h-1 w-1 rounded-full sm:block {getSection() === item.id ? 'bg-white' : 'bg-transparent'}"></span>
 		</div>
 	{/each}
 
-	<div class="mx-1 h-8 w-px self-center bg-white/15"></div>
+	<div class="mx-0.5 h-6 w-px shrink-0 self-center bg-white/15 sm:mx-1 sm:h-8"></div>
 	<button
 		type="button"
 		title="Toggle theme"
 		aria-label="Toggle theme"
 		onclick={toggleTheme}
-		class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/10 text-white/85 transition-colors hover:bg-white/20 hover:text-white"
+		class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10 text-white/85 transition-colors hover:bg-white/20 hover:text-white sm:h-11 sm:w-11 sm:rounded-2xl"
 	>
 		{#if getTheme() === 'dark'}
-			<svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
+			<svg viewBox="0 0 24 24" class="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" stroke-width="2">
 				<circle cx="12" cy="12" r="4" />
 				<path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32 1.41-1.41" stroke-linecap="round" />
 			</svg>
 		{:else}
-			<svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
+			<svg viewBox="0 0 24 24" class="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" stroke-width="2">
 				<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke-linecap="round" stroke-linejoin="round" />
 			</svg>
 		{/if}
