@@ -9,24 +9,34 @@ CasaOS and ZimaOS give you a nice dashboard for **one** machine. ZimaOS specific
 ## Architecture
 
 ```
-agent/    Go binary that runs on each managed server. Connects OUTBOUND to
-          the central panel over a TLS websocket using a rotating pairing
-          token — works even behind NAT, no inbound ports required. Reports
-          system stats and can be told to manage local Docker containers,
-          storage, files, etc.
+cmd/agent/    Entry point for the agent binary. Connects OUTBOUND to the
+              central panel over a websocket using a rotating pairing
+              token — works even behind NAT, no inbound ports required.
+              Reports system stats and runs commands the panel sends it
+              (Docker, files, terminal, port checks).
 
-server/   Go binary: the central panel. Serves the web UI, the API, and
-          holds the registry of paired nodes. Runs as a normal service on
-          any one of your machines (or a dedicated one) — not a special
-          appliance.
+cmd/server/   Entry point for the central panel binary. Serves the API,
+              the websocket hub agents connect to, and the web UI
+              (embedded into the binary at build time — see
+              internal/webui). Runs as a normal service on any one of
+              your machines, or a dedicated one — not a special appliance.
 
-web/      SvelteKit + Tailwind frontend. Dashboard, node list, containers,
-          storage, app store, terminal, file manager, settings. Dark/light
-          themes from day one.
+internal/     Where the actual logic lives, shared between cmd/agent and
+              cmd/server as needed: registry (paired nodes, SQLite), auth
+              (admin session), api (HTTP/websocket handlers), dockerclient,
+              fileops (sandboxed file manager), termsession (PTY), catalog
+              + appcatalog (the App Store, curated + imported), sysstats.
 
-desktop/  Tauri wrapper around web/ for native Windows/macOS/Linux apps.
-          Each install can act purely as a remote client, or opt in to also
-          run the agent locally and register itself as a managed node.
+web/          SvelteKit + Tailwind frontend — a single-page control panel
+              (dashboard, servers, containers, storage, app store,
+              terminal, files, settings), not a multi-route app. Builds
+              into internal/webui/dist, which cmd/server go:embeds.
+
+desktop/      Planned Tauri wrapper around web/ for native Windows/macOS/
+              Linux apps — not built yet, see desktop/README.md.
+
+packaging/    curl-installer, .deb/.rpm (nfpm), and the bare-metal install
+              ISO (Ubuntu autoinstall-based).
 ```
 
 ## Status
