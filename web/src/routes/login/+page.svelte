@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { authStatus, login, setupAdmin } from '$lib/api';
+	import logo from '$lib/assets/logo.png';
 
 	let checking = $state(true);
 	let needsSetup = $state(false);
@@ -63,11 +64,8 @@
 	{:else}
 		<div class="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
 			<div class="mb-6 flex items-center gap-2.5">
-				<span class="grid h-9 w-9 place-items-center rounded-xl bg-[var(--accent)] text-[var(--accent-fg)]">
-					<svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
-						<path d="M12 2 3 7v6c0 5 4 8.5 9 9 5-.5 9-4 9-9V7l-9-5Z" stroke-linecap="round" stroke-linejoin="round" />
-						<path d="M12 8v5l3 2" stroke-linecap="round" stroke-linejoin="round" />
-					</svg>
+				<span class="grid h-9 w-9 place-items-center rounded-xl bg-white p-1 shadow-sm">
+					<img src={logo} alt="FaroOS" class="h-full w-full object-contain" />
 				</span>
 				<span class="text-xl font-semibold tracking-tight text-[var(--fg)]">FaroOS</span>
 			</div>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
+	import favicon from '$lib/assets/logo.png';
 	import IconRail from '$lib/components/IconRail.svelte';
 	import ToastHost from '$lib/components/ToastHost.svelte';
 	import { getTheme } from '$lib/theme.svelte';

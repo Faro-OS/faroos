@@ -10,6 +10,7 @@ import (
 
 	"github.com/faroos/faroos/internal/api"
 	"github.com/faroos/faroos/internal/auth"
+	"github.com/faroos/faroos/internal/catalog"
 	"github.com/faroos/faroos/internal/registry"
 	"github.com/faroos/faroos/internal/webui"
 )
@@ -45,7 +46,20 @@ func main() {
 		log.Fatalf("failed to initialize auth: %v", err)
 	}
 
-	srv := api.New(reg, authSvc)
+	catalogCachePath := os.Getenv("FAROOS_CATALOG_CACHE")
+	if catalogCachePath == "" {
+		catalogCachePath = filepath.Join(filepath.Dir(dbPath), "catalog-cache.json")
+	}
+	catalogStore := catalog.NewStore(catalogCachePath)
+	if err := catalogStore.LoadCache(); err != nil {
+		log.Printf("catalog: failed to load cache %s: %v", catalogCachePath, err)
+	}
+	if catalogStore.NeedsRefresh() {
+		log.Printf("catalog: fetching Unraid Community Applications catalog in the background...")
+		catalogStore.RefreshInBackground()
+	}
+
+	srv := api.New(reg, authSvc, catalogStore)
 
 	mux := http.NewServeMux()
 	srv.Routes(mux)

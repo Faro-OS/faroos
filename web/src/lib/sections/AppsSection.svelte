@@ -3,8 +3,10 @@
 	import {
 		deployApp,
 		listApps,
+		listAppCategories,
 		listContainers,
 		listNodes,
+		refreshAppCatalog,
 		removeApp,
 		type CatalogApp,
 		type Container,
@@ -12,15 +14,42 @@
 	} from '$lib/api';
 	import { toastError, toastSuccess } from '$lib/toast.svelte';
 
+	const PAGE_SIZE = 60;
+
 	let nodes = $state<Node[]>([]);
 	let selectedNodeId = $state<string | null>(null);
 	let apps = $state<CatalogApp[]>([]);
+	let categories = $state<string[]>([]);
 	let containers = $state<Container[]>([]);
 	let loading = $state(true);
+	let refreshing = $state(false);
 	let error = $state<string | null>(null);
 	let busyAppId = $state<string | null>(null);
 
+	let search = $state('');
+	let activeCategory = $state('All');
+	let visibleCount = $state(PAGE_SIZE);
+	let brokenIcons = $state(new Set<string>());
+
 	const connectedNodes = $derived(nodes.filter((n) => n.connected));
+
+	const filteredApps = $derived.by(() => {
+		const q = search.trim().toLowerCase();
+		return apps.filter((app) => {
+			if (activeCategory !== 'All' && (app.category ?? 'Other') !== activeCategory) return false;
+			if (!q) return true;
+			return app.name.toLowerCase().includes(q) || app.description.toLowerCase().includes(q);
+		});
+	});
+
+	const visibleApps = $derived(filteredApps.slice(0, visibleCount));
+
+	$effect(() => {
+		// Reset pagination whenever the filter changes.
+		search;
+		activeCategory;
+		visibleCount = PAGE_SIZE;
+	});
 
 	function containerNameFor(appId: string): string {
 		return `faroos-app-${appId}`;
@@ -55,7 +84,8 @@
 	$effect(() => {
 		(async () => {
 			loading = true;
-			apps = await listApps();
+			apps = await listApps().catch(() => []);
+			categories = await listAppCategories().catch(() => []);
 			await loadNodes();
 			await loadContainers();
 			loading = false;
@@ -67,6 +97,20 @@
 			void loadContainers();
 		}
 	});
+
+	async function handleRefreshCatalog() {
+		refreshing = true;
+		try {
+			const res = await refreshAppCatalog();
+			apps = await listApps();
+			categories = await listAppCategories().catch(() => []);
+			toastSuccess(`Catalog refreshed — ${res.count} apps available`);
+		} catch (err) {
+			toastError(err instanceof Error ? err.message : 'Failed to refresh catalog');
+		} finally {
+			refreshing = false;
+		}
+	}
 
 	async function handleDeploy(app: CatalogApp) {
 		if (!selectedNodeId) return;
@@ -102,6 +146,14 @@
 			busyAppId = null;
 		}
 	}
+
+	function iconOk(app: CatalogApp): boolean {
+		return !!app.icon && !brokenIcons.has(app.id);
+	}
+
+	function markIconBroken(id: string) {
+		brokenIcons = new Set(brokenIcons).add(id);
+	}
 </script>
 
 <TopBar title="App Store">
@@ -115,6 +167,14 @@
 			{/each}
 		</select>
 	{/if}
+	<button
+		onclick={handleRefreshCatalog}
+		disabled={refreshing}
+		title="Re-fetch the Unraid Community Applications catalog"
+		class="rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--fg-muted)] hover:bg-[var(--track)] hover:text-[var(--fg)] disabled:opacity-50"
+	>
+		{refreshing ? 'Refreshing…' : '↻ Refresh catalog'}
+	</button>
 </TopBar>
 
 <main class="flex-1 p-6">
@@ -128,54 +188,111 @@
 		</div>
 	{/if}
 
+	<div class="mb-4 flex flex-col gap-3">
+		<div class="relative">
+			<svg viewBox="0 0 24 24" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--fg-subtle)]" fill="none" stroke="currentColor" stroke-width="2">
+				<circle cx="11" cy="11" r="7" />
+				<path d="m20 20-3-3" stroke-linecap="round" />
+			</svg>
+			<input
+				bind:value={search}
+				placeholder="Search {apps.length.toLocaleString()} apps…"
+				class="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] py-2.5 pl-9 pr-3 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+			/>
+		</div>
+
+		<div class="flex gap-2 overflow-x-auto pb-1">
+			<button
+				onclick={() => (activeCategory = 'All')}
+				class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors
+					{activeCategory === 'All' ? 'bg-[var(--accent)] text-[var(--accent-fg)]' : 'bg-[var(--track)] text-[var(--fg-muted)] hover:text-[var(--fg)]'}"
+			>
+				All apps
+			</button>
+			{#each categories as cat (cat)}
+				<button
+					onclick={() => (activeCategory = cat)}
+					class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors
+						{activeCategory === cat ? 'bg-[var(--accent)] text-[var(--accent-fg)]' : 'bg-[var(--track)] text-[var(--fg-muted)] hover:text-[var(--fg)]'}"
+				>
+					{cat}
+				</button>
+			{/each}
+		</div>
+	</div>
+
 	{#if loading}
 		<div class="grid place-items-center rounded-2xl border border-dashed border-[var(--border)] py-24 text-center">
 			<p class="text-[var(--fg-muted)]">Loading catalog…</p>
 		</div>
+	{:else if filteredApps.length === 0}
+		<div class="grid place-items-center rounded-2xl border border-dashed border-[var(--border)] py-24 text-center">
+			<p class="text-[var(--fg-muted)]">No apps match "{search}".</p>
+		</div>
 	{:else}
-		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-			{#each apps as app (app.id)}
+		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+			{#each visibleApps as app (app.id)}
 				{@const status = selectedNodeId ? statusFor(app.id) : 'not-installed'}
-				<article class="flex min-h-48 flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
-					<div class="mb-4 flex items-center justify-between">
-						<div class="grid h-11 w-11 place-items-center rounded-xl bg-[var(--track)] text-lg font-semibold text-[var(--accent)]">
+				<article class="flex gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+					{#if iconOk(app)}
+						<img
+							src={app.icon}
+							alt=""
+							loading="lazy"
+							onerror={() => markIconBroken(app.id)}
+							class="h-14 w-14 shrink-0 rounded-xl object-cover"
+						/>
+					{:else}
+						<div class="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-[var(--track)] text-lg font-semibold text-[var(--accent)]">
 							{app.name.charAt(0)}
 						</div>
-						{#if status === 'running'}
-							<span class="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent)]/10 px-2.5 py-1 text-xs font-semibold text-[var(--accent)]">
-								<span class="h-1.5 w-1.5 rounded-full bg-[var(--accent)]"></span> Running
-							</span>
-						{:else if status === 'stopped'}
-							<span class="inline-flex items-center gap-1.5 rounded-full bg-[var(--track)] px-2.5 py-1 text-xs font-semibold text-[var(--fg-subtle)]">
-								<span class="h-1.5 w-1.5 rounded-full bg-[var(--fg-subtle)]"></span> Stopped
-							</span>
+					{/if}
+
+					<div class="flex min-w-0 flex-1 flex-col">
+						<div class="flex items-start justify-between gap-2">
+							<h2 class="truncate font-semibold text-[var(--fg)]">{app.name}</h2>
+							{#if status === 'running'}
+								<span class="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-[var(--accent)]" title="Running"></span>
+							{:else if status === 'stopped'}
+								<span class="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-[var(--fg-subtle)]" title="Stopped"></span>
+							{/if}
+						</div>
+						<p class="mb-2 text-xs text-[var(--fg-subtle)]">{app.category ?? 'Other'}</p>
+						<p class="line-clamp-2 flex-1 text-xs leading-5 text-[var(--fg-muted)]">{app.description}</p>
+
+						{#if status === 'not-installed'}
+							<button
+								type="button"
+								onclick={() => handleDeploy(app)}
+								disabled={!selectedNodeId || busyAppId === app.id}
+								class="mt-3 self-start rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								{busyAppId === app.id ? 'Deploying…' : 'Install'}
+							</button>
+						{:else}
+							<button
+								type="button"
+								onclick={() => handleRemove(app)}
+								disabled={busyAppId === app.id}
+								class="mt-3 self-start rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-rose-500 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								{busyAppId === app.id ? 'Removing…' : 'Remove'}
+							</button>
 						{/if}
 					</div>
-					<h2 class="font-semibold text-[var(--fg)]">{app.name}</h2>
-					<p class="mt-1 flex-1 text-sm leading-6 text-[var(--fg-muted)]">{app.description}</p>
-					<p class="mt-2 font-mono text-xs text-[var(--fg-subtle)]">{app.image}</p>
-
-					{#if status === 'not-installed'}
-						<button
-							type="button"
-							onclick={() => handleDeploy(app)}
-							disabled={!selectedNodeId || busyAppId === app.id}
-							class="mt-5 w-full rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-fg)] disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							{busyAppId === app.id ? 'Deploying… (pulling image)' : 'Deploy'}
-						</button>
-					{:else}
-						<button
-							type="button"
-							onclick={() => handleRemove(app)}
-							disabled={busyAppId === app.id}
-							class="mt-5 w-full rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-rose-500 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							{busyAppId === app.id ? 'Removing…' : 'Remove'}
-						</button>
-					{/if}
 				</article>
 			{/each}
 		</div>
+
+		{#if visibleCount < filteredApps.length}
+			<div class="mt-6 flex justify-center">
+				<button
+					onclick={() => (visibleCount += PAGE_SIZE)}
+					class="rounded-xl border border-[var(--border)] px-5 py-2.5 text-sm font-semibold text-[var(--fg-muted)] hover:bg-[var(--track)] hover:text-[var(--fg)]"
+				>
+					Show more ({filteredApps.length - visibleCount} left)
+				</button>
+			</div>
+		{/if}
 	{/if}
 </main>

@@ -278,11 +278,11 @@ func dispatch(ctx context.Context, d *deps, cmd proto.Command) (any, error) {
 		return nil, d.files.Delete(p.Path)
 
 	case "apps.deploy":
-		var p appIDParams
-		if err := json.Unmarshal(cmd.Params, &p); err != nil {
+		var spec appcatalog.DeploySpec
+		if err := json.Unmarshal(cmd.Params, &spec); err != nil {
 			return nil, err
 		}
-		return nil, deployApp(ctx, d, p.AppID)
+		return nil, deployApp(ctx, d, spec)
 
 	case "apps.remove":
 		var p appIDParams
@@ -300,18 +300,17 @@ type appIDParams struct {
 	AppID string `json:"appId"`
 }
 
-func deployApp(ctx context.Context, d *deps, appID string) error {
-	app, ok := appcatalog.Find(appID)
-	if !ok {
-		return fmt.Errorf("unknown app: %s", appID)
+func deployApp(ctx context.Context, d *deps, spec appcatalog.DeploySpec) error {
+	if spec.Image == "" {
+		return fmt.Errorf("deploy spec for %s is missing an image", spec.AppID)
 	}
 
-	if err := d.docker.PullImage(ctx, app.Image); err != nil {
+	if err := d.docker.PullImage(ctx, spec.Image); err != nil {
 		return err
 	}
 
-	portBindings := make(map[string]int, len(app.Ports))
-	for _, p := range app.Ports {
+	portBindings := make(map[string]int, len(spec.Ports))
+	for _, p := range spec.Ports {
 		portProto := p.Protocol
 		if portProto == "" {
 			portProto = "tcp"
@@ -319,28 +318,28 @@ func deployApp(ctx context.Context, d *deps, appID string) error {
 		portBindings[fmt.Sprintf("%d/%s", p.Container, portProto)] = p.Host
 	}
 
-	binds := make([]string, 0, len(app.Volumes))
-	for _, v := range app.Volumes {
-		hostPath := filepath.Join(d.appsDir, app.ID, v.Name)
+	binds := make([]string, 0, len(spec.Volumes))
+	for _, v := range spec.Volumes {
+		hostPath := filepath.Join(d.appsDir, spec.AppID, v.Name)
 		if err := os.MkdirAll(hostPath, 0o755); err != nil {
 			return err
 		}
 		binds = append(binds, hostPath+":"+v.Container)
 	}
 
-	env := make([]string, 0, len(app.Env))
-	for k, v := range app.Env {
-		env = append(env, k+"="+v)
+	env := make([]string, 0, len(spec.Env))
+	for _, e := range spec.Env {
+		env = append(env, e.Key+"="+e.Default)
 	}
 
-	containerName := appcatalog.ContainerName(app.ID)
+	containerName := appcatalog.ContainerName(spec.AppID)
 	if existing, err := d.docker.FindByName(ctx, containerName); err == nil && existing != nil {
-		return fmt.Errorf("%s is already deployed", app.Name)
+		return fmt.Errorf("%s is already deployed", spec.AppID)
 	}
 
 	id, err := d.docker.CreateContainer(ctx, dockerclient.ContainerSpec{
 		Name:         containerName,
-		Image:        app.Image,
+		Image:        spec.Image,
 		Env:          env,
 		PortBindings: portBindings,
 		Binds:        binds,

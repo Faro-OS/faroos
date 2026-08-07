@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getSection, setSection, type SectionId } from '$lib/section.svelte';
 	import { getTheme, toggleTheme } from '$lib/theme.svelte';
+	import logo from '$lib/assets/logo.png';
 
 	const items: { id: SectionId; label: string; icon: string }[] = [
 		{ id: 'dashboard', label: 'Home', icon: 'M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z' },
@@ -17,6 +18,10 @@
 <nav
 	class="fixed left-4 top-4 z-40 flex items-center gap-1 rounded-2xl border border-white/10 bg-black/30 p-1.5 shadow-lg backdrop-blur-md"
 >
+	<span class="mr-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white p-1.5">
+		<img src={logo} alt="FaroOS" class="h-full w-full object-contain" />
+	</span>
+	<div class="mx-0.5 h-5 w-px bg-white/15"></div>
 	{#each items as item (item.id)}
 		<button
 			type="button"

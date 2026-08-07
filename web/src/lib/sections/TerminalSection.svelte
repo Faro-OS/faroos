@@ -2,19 +2,48 @@
 	import '@xterm/xterm/css/xterm.css';
 	import { Terminal } from '@xterm/xterm';
 	import { FitAddon } from '@xterm/addon-fit';
+	import { WebglAddon } from '@xterm/addon-webgl';
 	import TopBar from '$lib/components/TopBar.svelte';
 	import { listNodes, terminalWsUrl, type Node } from '$lib/api';
 
 	let nodes = $state<Node[]>([]);
 	let selectedNodeId = $state<string | null>(null);
 	let status = $state<'idle' | 'connecting' | 'connected' | 'closed' | 'error'>('idle');
+	let gpuAccelerated = $state(false);
 
 	const connectedNodes = $derived(nodes.filter((n) => n.connected));
 
 	let container: HTMLDivElement;
 	let term: Terminal | undefined;
 	let fitAddon: FitAddon | undefined;
+	let webglAddon: WebglAddon | undefined;
 	let ws: WebSocket | undefined;
+
+	// A Rio-inspired palette: deep near-black background, a vivid cyan
+	// accent, and saturated-but-not-garish ANSI colors.
+	const terminalTheme = {
+		background: '#0b0d12',
+		foreground: '#e8e9ec',
+		cursor: '#2dd4bf',
+		cursorAccent: '#0b0d12',
+		selectionBackground: '#2dd4bf40',
+		black: '#1a1d24',
+		red: '#f43f5e',
+		green: '#22c55e',
+		yellow: '#eab308',
+		blue: '#3b82f6',
+		magenta: '#d946ef',
+		cyan: '#2dd4bf',
+		white: '#e8e9ec',
+		brightBlack: '#4b5160',
+		brightRed: '#fb7185',
+		brightGreen: '#4ade80',
+		brightYellow: '#facc15',
+		brightBlue: '#60a5fa',
+		brightMagenta: '#e879f9',
+		brightCyan: '#5eead4',
+		brightWhite: '#ffffff'
+	};
 
 	function bytesToBase64(bytes: Uint8Array): string {
 		let binary = '';
@@ -60,12 +89,27 @@
 		term = new Terminal({
 			convertEol: true,
 			fontSize: 13,
-			theme: { background: '#00000000' }
+			fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+			cursorBlink: true,
+			cursorStyle: 'bar',
+			theme: terminalTheme
 		});
 		fitAddon = new FitAddon();
 		term.loadAddon(fitAddon);
 		term.open(container);
 		fitAddon.fit();
+
+		// GPU-accelerated rendering when available (not guaranteed in every
+		// browser/context — e.g. some sandboxed embeds disable WebGL2) —
+		// falls back to xterm's default canvas renderer if it throws.
+		try {
+			webglAddon = new WebglAddon();
+			webglAddon.onContextLoss(() => webglAddon?.dispose());
+			term.loadAddon(webglAddon);
+			gpuAccelerated = true;
+		} catch {
+			gpuAccelerated = false;
+		}
 
 		term.onData((data) => {
 			if (ws?.readyState === WebSocket.OPEN) {
@@ -85,6 +129,7 @@
 		return () => {
 			resizeObserver.disconnect();
 			ws?.close();
+			webglAddon?.dispose();
 			term?.dispose();
 		};
 	});
@@ -124,6 +169,14 @@
 	{/if}
 	{#if statusLabel}
 		<span class="text-xs text-[var(--fg-subtle)]">{statusLabel}</span>
+	{/if}
+	{#if gpuAccelerated}
+		<span class="flex items-center gap-1 text-xs text-[var(--accent)]" title="Rendered on the GPU via WebGL">
+			<svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M13 2 3 14h7l-1 8 11-14h-7l1-6Z" stroke-linecap="round" stroke-linejoin="round" />
+			</svg>
+			GPU
+		</span>
 	{/if}
 </TopBar>
 

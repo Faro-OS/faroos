@@ -156,18 +156,35 @@ export interface AppVolume {
 	container: string;
 }
 
+export interface AppEnvVar {
+	key: string;
+	default: string;
+	description?: string;
+}
+
 export interface CatalogApp {
 	id: string;
 	name: string;
 	description: string;
+	icon?: string;
 	image: string;
+	category?: string;
+	source: 'faroos' | 'unraid-ca';
 	ports: AppPort[];
 	volumes: AppVolume[];
-	env?: Record<string, string>;
+	env?: AppEnvVar[];
 }
 
 export function listApps(): Promise<CatalogApp[]> {
 	return request<CatalogApp[]>('/api/apps');
+}
+
+export function listAppCategories(): Promise<string[]> {
+	return request<string[]>('/api/apps/categories');
+}
+
+export function refreshAppCatalog(): Promise<{ ok: boolean; count: number }> {
+	return request('/api/apps/refresh', { method: 'POST' });
 }
 
 export function deployApp(nodeId: string, appId: string): Promise<{ ok: boolean }> {

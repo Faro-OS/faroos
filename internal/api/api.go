@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/faroos/faroos/internal/auth"
+	"github.com/faroos/faroos/internal/catalog"
 	"github.com/faroos/faroos/internal/proto"
 	"github.com/faroos/faroos/internal/registry"
 	"github.com/gorilla/websocket"
@@ -16,14 +17,16 @@ import (
 type Server struct {
 	reg      *registry.Registry
 	authSvc  *auth.Auth
+	catalog  *catalog.Store
 	hub      *hub
 	upgrader websocket.Upgrader
 }
 
-func New(reg *registry.Registry, authSvc *auth.Auth) *Server {
+func New(reg *registry.Registry, authSvc *auth.Auth, catalogStore *catalog.Store) *Server {
 	return &Server{
 		reg:     reg,
 		authSvc: authSvc,
+		catalog: catalogStore,
 		hub:     newHub(),
 		upgrader: websocket.Upgrader{
 			// Agents and the web UI are both first-party; origin checking
@@ -57,6 +60,8 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/nodes/{id}/files", s.requireAuth(s.handleDeleteFile))
 
 	mux.HandleFunc("GET /api/apps", s.requireAuth(s.handleListApps))
+	mux.HandleFunc("GET /api/apps/categories", s.requireAuth(s.handleAppCategories))
+	mux.HandleFunc("POST /api/apps/refresh", s.requireAuth(s.handleRefreshApps))
 	mux.HandleFunc("POST /api/nodes/{id}/apps/{appId}/deploy", s.requireAuth(s.handleDeployApp))
 	mux.HandleFunc("POST /api/nodes/{id}/apps/{appId}/remove", s.requireAuth(s.handleRemoveApp))
 
