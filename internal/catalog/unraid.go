@@ -159,9 +159,9 @@ func convertFeedApp(fa feedApp) (appcatalog.App, bool) {
 		return appcatalog.App{}, false
 	}
 
-	var ports []appcatalog.Port
-	var volumes []appcatalog.Volume
-	var env []appcatalog.EnvVar
+	ports := []appcatalog.Port{}
+	volumes := []appcatalog.Volume{}
+	env := []appcatalog.EnvVar{}
 
 	for _, c := range fa.Config {
 		a := c.Attributes

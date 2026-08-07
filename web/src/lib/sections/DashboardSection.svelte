@@ -217,11 +217,13 @@
 					<div class="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-5">
 						{#each deployedApps as { app, container } (app.id)}
 							{#if container}
-								<a
-									href={appUrl(app.ports[0]?.host ?? 80)}
-									target="_blank"
-									rel="noreferrer"
-									class="glass-dark flex flex-col items-center gap-2 rounded-[22px] p-4 text-center transition-colors hover:bg-white/10"
+								{@const hostPort = app.ports?.[0]?.host}
+								<svelte:element
+									this={hostPort ? 'a' : 'div'}
+									href={hostPort ? appUrl(hostPort) : undefined}
+									target={hostPort ? '_blank' : undefined}
+									rel={hostPort ? 'noreferrer' : undefined}
+									class="glass-dark flex flex-col items-center gap-2 rounded-[22px] p-4 text-center transition-colors {hostPort ? 'hover:bg-white/10' : ''}"
 								>
 									<AppIcon name={app.name} icon={app.icon} size={48} />
 									<span class="line-clamp-2 text-xs font-medium text-white">{app.name}</span>
@@ -229,7 +231,7 @@
 										<span class="h-1.5 w-1.5 rounded-full {container.state === 'running' ? 'bg-emerald-400' : 'bg-white/40'}"></span>
 										{container.state === 'running' ? 'Running' : 'Stopped'}
 									</span>
-								</a>
+								</svelte:element>
 							{/if}
 						{/each}
 

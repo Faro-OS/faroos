@@ -19,11 +19,11 @@
 
 	type PortRowStatus = 'idle' | 'checking' | 'free' | 'busy-own' | 'busy-other';
 
-	let ports = $state<AppPort[]>(app.ports.map((p) => ({ ...p })));
+	let ports = $state<AppPort[]>((app.ports ?? []).map((p) => ({ ...p })));
 	let env = $state<AppEnvVar[]>(app.env?.map((e) => ({ ...e, default: e.default })) ?? []);
-	let portStatus = $state<PortRowStatus[]>(app.ports.map(() => 'idle'));
-	let portContainer = $state<(string | undefined)[]>(app.ports.map(() => undefined));
-	let portContainerId = $state<(string | undefined)[]>(app.ports.map(() => undefined));
+	let portStatus = $state<PortRowStatus[]>((app.ports ?? []).map(() => 'idle'));
+	let portContainer = $state<(string | undefined)[]>((app.ports ?? []).map(() => undefined));
+	let portContainerId = $state<(string | undefined)[]>((app.ports ?? []).map(() => undefined));
 	let freeing = $state<number | null>(null);
 	let revealed = $state(new Set<number>());
 	let deploying = $state(false);
