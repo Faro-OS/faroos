@@ -6,10 +6,7 @@
 	{#each getToasts() as toast (toast.id)}
 		<div
 			role="status"
-			class="pointer-events-auto flex max-w-sm items-center gap-3 rounded-xl border px-4 py-2.5 text-sm shadow-lg backdrop-blur
-				{toast.kind === 'success'
-				? 'border-[var(--accent)]/30 bg-[var(--surface)] text-[var(--fg)]'
-				: 'border-rose-500/30 bg-[var(--surface)] text-[var(--fg)]'}"
+			class="glass pointer-events-auto flex max-w-sm items-center gap-3 rounded-2xl px-4 py-2.5 text-sm text-[var(--fg)]"
 		>
 			<span
 				class="h-2 w-2 shrink-0 rounded-full {toast.kind === 'success' ? 'bg-[var(--accent)]' : 'bg-rose-500'}"

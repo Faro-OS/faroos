@@ -136,7 +136,7 @@
 		<button
 			onclick={() => fileInput?.click()}
 			disabled={uploading}
-			class="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-fg)] disabled:opacity-50"
+			class="rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-[var(--accent-fg)] disabled:opacity-50"
 		>
 			{uploading ? 'Uploading…' : '+ Upload'}
 		</button>

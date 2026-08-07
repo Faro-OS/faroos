@@ -143,7 +143,7 @@
 				{#if nodes.length > 0}
 					<select
 						bind:value={selectedNodeId}
-						class="rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-sm text-white backdrop-blur-md outline-none"
+						class="glass-dark rounded-xl px-3 py-2 text-sm text-white outline-none"
 					>
 						{#each nodes as node (node.id)}
 							<option value={node.id} class="text-black">{node.name}{node.connected ? '' : ' (offline)'}</option>
@@ -152,7 +152,7 @@
 				{/if}
 				<button
 					onclick={() => (showPairModal = true)}
-					class="rounded-xl bg-white/90 px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+					class="rounded-full bg-white px-5 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
 				>
 					+ Add server
 				</button>
@@ -166,7 +166,7 @@
 		{/if}
 
 		{#if nodes.length === 0}
-			<div class="grid place-items-center rounded-2xl border border-dashed border-white/20 bg-black/20 py-24 text-center backdrop-blur-md">
+			<div class="grid place-items-center glass-dark rounded-[24px] border-dashed py-24 text-center">
 				<p class="text-white/80">No servers paired yet.</p>
 				<button onclick={() => (showPairModal = true)} class="mt-3 text-sm font-semibold text-white hover:underline">
 					Pair your first server →
@@ -176,7 +176,7 @@
 			<div class="grid grid-cols-1 gap-5 lg:grid-cols-[280px_1fr]">
 				<!-- Widget column -->
 				<div class="flex flex-col gap-4">
-					<div class="rounded-2xl border border-white/10 bg-black/30 p-5 backdrop-blur-md">
+					<div class="glass-dark rounded-[24px] p-5">
 						<div class="mb-3 flex items-center justify-between">
 							<h2 class="text-sm font-semibold text-white">System Status</h2>
 							<span class="flex items-center gap-1.5 text-xs text-white/60">
@@ -192,7 +192,7 @@
 						{/if}
 					</div>
 
-					<div class="rounded-2xl border border-white/10 bg-black/30 p-5 backdrop-blur-md">
+					<div class="glass-dark rounded-[24px] p-5">
 						<div class="mb-3 flex items-center justify-between">
 							<h2 class="text-sm font-semibold text-white">Storage</h2>
 							<button onclick={() => setSection('storage')} class="text-xs text-white/60 hover:text-white">Details →</button>
@@ -221,7 +221,7 @@
 									href={appUrl(app.ports[0]?.host ?? 80)}
 									target="_blank"
 									rel="noreferrer"
-									class="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-black/25 p-4 text-center backdrop-blur-md transition-colors hover:bg-black/40"
+									class="glass-dark flex flex-col items-center gap-2 rounded-[22px] p-4 text-center transition-colors hover:bg-white/10"
 								>
 									<AppIcon name={app.name} icon={app.icon} size={48} />
 									<span class="line-clamp-2 text-xs font-medium text-white">{app.name}</span>
@@ -235,7 +235,7 @@
 
 						<button
 							onclick={() => setSection('apps')}
-							class="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/25 bg-black/10 p-4 text-center text-white/70 backdrop-blur-md transition-colors hover:bg-black/25 hover:text-white"
+							class="glass-dark flex flex-col items-center justify-center gap-2 rounded-[22px] border-dashed p-4 text-center text-white/70 transition-colors hover:bg-white/10 hover:text-white"
 						>
 							<span class="grid h-12 w-12 place-items-center rounded-2xl border border-white/30 text-2xl">+</span>
 							<span class="text-xs font-medium">App Store</span>
@@ -249,7 +249,7 @@
 
 {#if showPairModal}
 	<div class="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
-		<div class="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl">
+		<div class="glass w-full max-w-md rounded-[28px] p-6">
 			{#if !pairingResult}
 				<h2 class="mb-1 text-lg font-semibold text-[var(--fg)]">Pair a new server</h2>
 				<p class="mb-4 text-sm text-[var(--fg-subtle)]">
@@ -268,7 +268,7 @@
 						<button
 							type="submit"
 							disabled={pairing}
-							class="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-fg)] disabled:opacity-50"
+							class="rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-[var(--accent-fg)] disabled:opacity-50"
 						>
 							{pairing ? 'Pairing…' : 'Generate credentials'}
 						</button>
@@ -286,7 +286,7 @@ FAROOS_TOKEN={pairingResult.token}
 ./faroos-agent</code
 				></pre>
 				<div class="mt-4 flex justify-end">
-					<button onclick={closeModal} class="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-fg)]">
+					<button onclick={closeModal} class="rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-[var(--accent-fg)]">
 						Done
 					</button>
 				</div>

@@ -212,7 +212,7 @@
 
 {#if logsFor}
 	<div class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
-		<div class="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl">
+		<div class="glass flex max-h-[80vh] w-full max-w-2xl flex-col rounded-[28px] p-6">
 			<div class="mb-3 flex items-center justify-between">
 				<h2 class="font-semibold text-[var(--fg)]">Logs — {containerName(logsFor)}</h2>
 				<button onclick={() => (logsFor = null)} class="text-sm text-[var(--fg-subtle)] hover:text-[var(--fg)]">Close</button>

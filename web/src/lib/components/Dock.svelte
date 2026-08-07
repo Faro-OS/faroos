@@ -44,7 +44,7 @@
 	aria-label="FaroOS"
 	onmousemove={handleMouseMove}
 	onmouseleave={resetScales}
-	class="fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-end gap-1.5 rounded-3xl border border-white/10 bg-black/35 px-2.5 py-2 shadow-2xl backdrop-blur-xl"
+	class="glass-dark fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-end gap-1.5 rounded-[28px] px-2.5 py-2"
 >
 	<span class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white p-1.5 shadow">
 		<img src={logo} alt="FaroOS" class="h-full w-full object-contain" />
@@ -55,7 +55,7 @@
 		<div class="relative flex flex-col items-center">
 			{#if hovered === i}
 				<span
-					class="pointer-events-none absolute -top-9 whitespace-nowrap rounded-lg bg-black/80 px-2.5 py-1 text-xs font-medium text-white shadow-lg"
+					class="glass-dark pointer-events-none absolute -top-10 whitespace-nowrap rounded-xl px-2.5 py-1 text-xs font-medium text-white"
 				>
 					{item.label}
 				</span>

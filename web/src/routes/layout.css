@@ -71,3 +71,40 @@ body {
 * {
 	transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* Apple's "Liquid Glass" material (iOS 26 / macOS): heavy blur + boosted
+   saturation so background content reads through tinted, a hairline
+   border that catches light unevenly (brighter on top, like a real
+   refractive edge), and an inset highlight instead of a flat border.
+   Reserved for floating chrome (dock, dialogs, toasts) — Apple itself
+   never puts glass under dense data (tables, lists), only over content,
+   so the rest of the app (tables, forms) stays on flat --surface for
+   legibility. Two variants: `.glass` sits on the app's own themed
+   background (dialogs/toasts), `.glass-dark` sits over the wallpaper/dock
+   which is always dark regardless of light/dark theme. */
+.glass {
+	background: color-mix(in srgb, var(--surface) 75%, transparent);
+	backdrop-filter: blur(28px) saturate(1.8);
+	-webkit-backdrop-filter: blur(28px) saturate(1.8);
+	/* border-width/color set separately (not the `border` shorthand) so a
+	   utility class like Tailwind's border-dashed can still override just
+	   the style without losing the color/width here. */
+	border-width: 1px;
+	border-color: color-mix(in srgb, var(--fg) 12%, transparent);
+	border-style: solid;
+	box-shadow:
+		inset 0 1px 0 0 color-mix(in srgb, white 30%, transparent),
+		0 20px 50px -12px rgba(0, 0, 0, 0.35);
+}
+
+.glass-dark {
+	background: color-mix(in srgb, black 30%, transparent);
+	backdrop-filter: blur(30px) saturate(1.7);
+	-webkit-backdrop-filter: blur(30px) saturate(1.7);
+	border-width: 1px;
+	border-color: rgba(255, 255, 255, 0.16);
+	border-style: solid;
+	box-shadow:
+		inset 0 1px 0 0 rgba(255, 255, 255, 0.22),
+		0 16px 44px -12px rgba(0, 0, 0, 0.6);
+}

@@ -125,7 +125,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div class="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4 backdrop-blur-sm">
-	<div class="flex max-h-[85vh] w-full max-w-lg flex-col rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
+	<div class="glass flex max-h-[85vh] w-full max-w-lg flex-col rounded-[28px]">
 		<div class="flex items-center gap-3 border-b border-[var(--border)] p-5">
 			<AppIcon name={app.name} icon={app.icon} size={48} />
 			<div class="min-w-0 flex-1">

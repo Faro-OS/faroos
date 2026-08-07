@@ -117,7 +117,7 @@
 				<button
 					type="submit"
 					disabled={submitting}
-					class="mt-2 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent-fg)] disabled:opacity-50"
+					class="mt-2 rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-[var(--accent-fg)] disabled:opacity-50"
 				>
 					{submitting ? 'Please wait…' : needsSetup ? 'Create account & sign in' : 'Sign in'}
 				</button>
