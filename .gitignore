@@ -1,5 +1,11 @@
 bin/
-dist/
+# Scoped, not a blanket "dist/" — that matched internal/webui/dist/ too
+# (gitignore patterns without a leading slash match at any depth) and
+# silently blocked the tracked placeholder there despite the negation
+# further down, since git can't re-include a file whose parent directory
+# is already excluded. Broke `go build` on every fresh clone/CI run.
+/dist/
+packaging/iso/dist/
 *.log
 
 # Go
