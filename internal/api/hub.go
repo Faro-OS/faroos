@@ -5,8 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
-
 	"github.com/faroos/faroos/internal/proto"
 )
 
@@ -24,12 +22,20 @@ type hub struct {
 	conns map[string]*agentConn
 }
 
+type agentConnection interface {
+	ReadJSON(any) error
+	WriteJSON(any) error
+	SetReadDeadline(time.Time) error
+	Close() error
+}
+
 func newHub() *hub {
 	return &hub{conns: make(map[string]*agentConn)}
 }
 
 type agentConn struct {
-	conn    *websocket.Conn
+	conn    agentConnection
+	mode    string
 	writeMu sync.Mutex
 
 	pendingMu sync.Mutex
@@ -42,22 +48,29 @@ type agentConn struct {
 	streams   map[string]chan proto.Envelope
 }
 
-func (h *hub) register(nodeID string, conn *websocket.Conn) *agentConn {
+func (h *hub) register(nodeID string, conn agentConnection, mode string) *agentConn {
 	ac := &agentConn{
 		conn:    conn,
+		mode:    mode,
 		pending: make(map[string]chan proto.CommandResult),
 		streams: make(map[string]chan proto.Envelope),
 	}
 	h.mu.Lock()
+	previous := h.conns[nodeID]
 	h.conns[nodeID] = ac
 	h.mu.Unlock()
+	if previous != nil {
+		_ = previous.conn.Close()
+	}
 	return ac
 }
 
-func (h *hub) unregister(nodeID string, ac *agentConn) {
+func (h *hub) unregister(nodeID string, ac *agentConn) bool {
 	h.mu.Lock()
+	removed := false
 	if h.conns[nodeID] == ac {
 		delete(h.conns, nodeID)
+		removed = true
 	}
 	h.mu.Unlock()
 
@@ -74,6 +87,7 @@ func (h *hub) unregister(nodeID string, ac *agentConn) {
 		delete(ac.streams, id)
 	}
 	ac.streamsMu.Unlock()
+	return removed
 }
 
 func (h *hub) get(nodeID string) (*agentConn, bool) {

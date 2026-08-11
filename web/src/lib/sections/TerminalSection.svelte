@@ -2,34 +2,32 @@
 	import '@xterm/xterm/css/xterm.css';
 	import { Terminal } from '@xterm/xterm';
 	import { FitAddon } from '@xterm/addon-fit';
-	import { WebglAddon } from '@xterm/addon-webgl';
 	import TopBar from '$lib/components/TopBar.svelte';
 	import { listNodes, terminalWsUrl, type Node } from '$lib/api';
 
 	let nodes = $state<Node[]>([]);
 	let selectedNodeId = $state<string | null>(null);
 	let status = $state<'idle' | 'connecting' | 'connected' | 'closed' | 'error'>('idle');
-	let gpuAccelerated = $state(false);
 
 	const connectedNodes = $derived(nodes.filter((n) => n.connected));
 
 	let container: HTMLDivElement;
 	let term: Terminal | undefined;
 	let fitAddon: FitAddon | undefined;
-	let webglAddon: WebglAddon | undefined;
 	let ws: WebSocket | undefined;
 
-	// A Rio-inspired palette: deep near-black background, a vivid cyan
-	// accent, and saturated-but-not-garish ANSI colors.
+	// Keep the shell neutral and predictable. The default renderer is used
+	// intentionally: WebGL is faster on paper, but a context loss could leave
+	// an otherwise healthy remote shell rendering as an empty black panel.
 	const terminalTheme = {
-		background: '#0b0d12',
-		foreground: '#e8e9ec',
-		cursor: '#2dd4bf',
-		cursorAccent: '#0b0d12',
-		selectionBackground: '#2dd4bf40',
+		background: '#0c0d0f',
+		foreground: '#f0f0f2',
+		cursor: '#f0f0f2',
+		cursorAccent: '#0c0d0f',
+		selectionBackground: '#ffffff2b',
 		black: '#1a1d24',
 		red: '#f43f5e',
-		green: '#22c55e',
+		green: '#50c878',
 		yellow: '#eab308',
 		blue: '#3b82f6',
 		magenta: '#d946ef',
@@ -66,8 +64,14 @@
 		fitAddon.fit();
 		status = 'connecting';
 		const socket = new WebSocket(terminalWsUrl(nodeId, term.cols, term.rows));
-		socket.onopen = () => (status = 'connected');
-		socket.onclose = () => (status = 'closed');
+		socket.onopen = () => {
+			status = 'connected';
+			term?.focus();
+		};
+		socket.onclose = () => {
+			status = 'closed';
+			term?.write('\r\n\x1b[90m[connection closed — use Reconnect to start a new session]\x1b[0m\r\n');
+		};
 		socket.onerror = () => (status = 'error');
 		socket.onmessage = (event) => {
 			try {
@@ -98,18 +102,7 @@
 		term.loadAddon(fitAddon);
 		term.open(container);
 		fitAddon.fit();
-
-		// GPU-accelerated rendering when available (not guaranteed in every
-		// browser/context — e.g. some sandboxed embeds disable WebGL2) —
-		// falls back to xterm's default canvas renderer if it throws.
-		try {
-			webglAddon = new WebglAddon();
-			webglAddon.onContextLoss(() => webglAddon?.dispose());
-			term.loadAddon(webglAddon);
-			gpuAccelerated = true;
-		} catch {
-			gpuAccelerated = false;
-		}
+		term.writeln('\x1b[90mFaroOS secure terminal · establishing session…\x1b[0m');
 
 		term.onData((data) => {
 			if (ws?.readyState === WebSocket.OPEN) {
@@ -129,7 +122,6 @@
 		return () => {
 			resizeObserver.disconnect();
 			ws?.close();
-			webglAddon?.dispose();
 			term?.dispose();
 		};
 	});
@@ -160,7 +152,7 @@
 	{#if connectedNodes.length > 0}
 		<select
 			bind:value={selectedNodeId}
-			class="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+			class="control rounded-xl px-3 text-sm text-[var(--fg)] outline-none"
 		>
 			{#each connectedNodes as node (node.id)}
 				<option value={node.id}>{node.name}</option>
@@ -168,27 +160,20 @@
 		</select>
 	{/if}
 	{#if statusLabel}
-		<span class="text-xs text-[var(--fg-subtle)]">{statusLabel}</span>
+		<span class="flex items-center gap-1.5 rounded-full bg-[var(--track)] px-2.5 py-1 text-[10px] font-semibold text-[var(--fg-subtle)]"><span class="h-1.5 w-1.5 rounded-full {status === 'connected' ? 'bg-emerald-500' : 'bg-[var(--fg-subtle)]'}"></span>{statusLabel}</span>
 	{/if}
-	{#if gpuAccelerated}
-		<span class="flex items-center gap-1 text-xs text-[var(--accent)]" title="Rendered on the GPU via WebGL">
-			<svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2">
-				<path d="M13 2 3 14h7l-1 8 11-14h-7l1-6Z" stroke-linecap="round" stroke-linejoin="round" />
-			</svg>
-			GPU
-		</span>
-	{/if}
+	{#if selectedNodeId}<button type="button" onclick={() => connect(selectedNodeId!)} class="control rounded-xl px-3 py-2 text-xs font-semibold text-[var(--fg-muted)]">Reconnect</button>{/if}
 </TopBar>
 
-<main class="flex flex-1 flex-col p-6 pb-28">
+<main class="section-enter mx-auto flex min-h-[calc(100dvh-78px)] w-full max-w-[1480px] flex-col p-4 pb-32 sm:p-7 sm:pb-32 lg:p-10 lg:pb-32">
 	{#if connectedNodes.length === 0}
-		<div class="grid flex-1 place-items-center rounded-2xl border border-dashed border-[var(--border)] text-center">
+		<div class="surface-card grid flex-1 place-items-center rounded-[24px] border-dashed text-center">
 			<p class="text-[var(--fg-muted)]">No connected servers yet.</p>
 		</div>
 	{/if}
 	<div
 		bind:this={container}
-		class="flex-1 overflow-hidden rounded-2xl border border-[var(--border)] bg-[#0b0d12] p-3"
+		class="min-h-[520px] flex-1 overflow-hidden rounded-[20px] border border-white/8 bg-[#0c0d0f] p-4 shadow-[var(--shadow-md)]"
 		class:hidden={connectedNodes.length === 0}
 	></div>
 </main>

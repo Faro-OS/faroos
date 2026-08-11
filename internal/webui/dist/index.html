@@ -2,15 +2,39 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<title>FaroOS</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="text-scale" content="scale" />
+		<link href="/_app/immutable/entry/start.Bk2zdXvu.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/B7U2Ff_-.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/K9UBEB5D.js" rel="modulepreload">
+		<link href="/_app/immutable/entry/app.D2XKcAza.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/HclGiUj8.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/xihTtKlq.js" rel="modulepreload">
+		<link href="/_app/immutable/nodes/0.CwMkQuce.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/CyujbjtE.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/CxYAPCmL.js" rel="modulepreload">
+		<link href="/_app/immutable/chunks/ECW9hugQ.js" rel="modulepreload">
+
+		<link href="/_app/immutable/assets/0.Db-vWHs8.css" rel="stylesheet">
 	</head>
-	<body>
-		<p>
-			FaroOS web UI placeholder — this file is tracked in git so `go build`
-			works from a fresh clone without requiring the frontend to be built
-			first. A real build (`cd web && npm run build`) overwrites everything
-			in this directory with the actual SvelteKit output before compiling
-			cmd/server for a real release; don't commit that output back here.
-		</p>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">
+			<script>
+				{
+					__sveltekit_1sllzh3 = {
+						base: ""
+					};
+
+					const element = document.currentScript.parentElement;
+
+					Promise.all([
+						import("/_app/immutable/entry/start.Bk2zdXvu.js"),
+						import("/_app/immutable/entry/app.D2XKcAza.js")
+					]).then(([kit, app]) => {
+						kit.start(app, element);
+					});
+				}
+			</script>
+		</div>
 	</body>
 </html>

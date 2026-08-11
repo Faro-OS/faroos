@@ -42,8 +42,9 @@ type appIDParams struct {
 // edited by the user (port, env values). Kept optional-shaped (all zero
 // values valid) so nothing breaks if a client sends an empty body.
 type deployRequest struct {
-	Ports []appcatalog.Port   `json:"ports"`
-	Env   []appcatalog.EnvVar `json:"env"`
+	Ports     []appcatalog.Port   `json:"ports"`
+	Env       []appcatalog.EnvVar `json:"env"`
+	Arguments *string             `json:"arguments"`
 }
 
 func (s *Server) handleDeployApp(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +72,19 @@ func (s *Server) handleDeployApp(w http.ResponseWriter, r *http.Request) {
 	if len(req.Env) > 0 {
 		env = req.Env
 	}
+	arguments := app.Arguments
+	if req.Arguments != nil {
+		arguments = *req.Arguments
+	}
+	if appcatalog.HasUnresolvedCredentialPlaceholder(arguments) {
+		http.Error(w, "replace the credential placeholder in container arguments", http.StatusBadRequest)
+		return
+	}
+	command, err := appcatalog.ParseArguments(arguments)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	for _, p := range ports {
 		if p.Host < 1 || p.Host > 65535 {
@@ -85,6 +99,7 @@ func (s *Server) handleDeployApp(w http.ResponseWriter, r *http.Request) {
 		Ports:   ports,
 		Volumes: app.Volumes,
 		Env:     env,
+		Command: command,
 	}
 	params, _ := json.Marshal(spec)
 

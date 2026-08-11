@@ -3,15 +3,15 @@
 
 	let { name, icon, size = 56 }: { name: string; icon?: string; size?: number } = $props();
 
-	let broken = $state(false);
+	let failedIcon = $state<string | undefined>();
 </script>
 
-{#if icon && !broken}
+{#if icon && failedIcon !== icon}
 	<img
 		src={icon}
 		alt=""
 		loading="lazy"
-		onerror={() => (broken = true)}
+		onerror={() => (failedIcon = icon)}
 		style="width: {size}px; height: {size}px;"
 		class="shrink-0 rounded-[22%] object-cover shadow-sm"
 	/>

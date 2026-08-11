@@ -2,9 +2,10 @@
 	import './layout.css';
 	import favicon from '$lib/assets/logo.png';
 	import Dock from '$lib/components/Dock.svelte';
+	import Spotlight from '$lib/components/Spotlight.svelte';
 	import ToastHost from '$lib/components/ToastHost.svelte';
 	import { getTheme } from '$lib/theme.svelte';
-	import { page } from '$app/state';
+	import { page, updated } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { authStatus } from '$lib/api';
 
@@ -18,6 +19,12 @@
 	$effect(() => {
 		if (typeof document !== 'undefined') {
 			document.documentElement.dataset.theme = getTheme();
+		}
+	});
+
+	$effect(() => {
+		if (updated.current && typeof window !== 'undefined') {
+			window.location.reload();
 		}
 	});
 
@@ -48,12 +55,18 @@
 {#if isLoginRoute}
 	{@render children()}
 {:else if !authChecked}
-	<div class="grid h-screen w-screen place-items-center bg-[var(--bg)]">
-		<p class="text-[var(--fg-subtle)]">Loading…</p>
+	<div class="launch-screen">
+		<div class="launch-content">
+			<span class="launch-icon"><img src={favicon} alt="" /></span>
+			<p>Opening FaroOS…</p>
+		</div>
 	</div>
 {:else if authenticated}
-	<div class="h-screen w-screen overflow-y-auto">
-		{@render children()}
+	<div class="app-frame">
+		<div class="app-scroll">
+			{@render children()}
+		</div>
+		<Dock />
+		<Spotlight />
 	</div>
-	<Dock />
 {/if}

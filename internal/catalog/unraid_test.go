@@ -6,6 +6,23 @@ import (
 	"time"
 )
 
+func TestConvertFeedAppPreservesPostArguments(t *testing.T) {
+	app, ok := convertFeedApp(feedApp{
+		Name:       "cloudflare-tunnel",
+		Repository: "cloudflare/cloudflared:latest",
+		PostArgs:   "  tunnel --no-autoupdate run --token YOUR_TUNNEL_TOKEN_HERE  ",
+	})
+	if !ok {
+		t.Fatal("convertFeedApp rejected a valid app")
+	}
+	if want := "tunnel --no-autoupdate run --token YOUR_TUNNEL_TOKEN_HERE"; app.Arguments != want {
+		t.Fatalf("Arguments = %q, want %q", app.Arguments, want)
+	}
+	if len(app.Ports) != 0 {
+		t.Fatalf("Ports = %#v, want none", app.Ports)
+	}
+}
+
 // TestFetchUnraidCatalogReal hits the real, live Unraid CA feed — this is
 // an integration smoke test, not a unit test: it validates that our parser
 // still matches the real feed's current shape (community-maintained feeds

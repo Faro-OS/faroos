@@ -5,8 +5,8 @@ After=network-online.target docker.service
 
 [Service]
 Type=simple
-User=faroos
-Group=faroos
+User=root
+Group=root
 WorkingDirectory=/var/lib/faroos/agent
 EnvironmentFile=-/etc/faroos/agent.env
 ExecStart=/usr/local/bin/faroos-agent

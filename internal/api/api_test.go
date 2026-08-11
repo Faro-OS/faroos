@@ -37,7 +37,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *http.Client) {
 
 	catalogStore := catalog.NewStore(filepath.Join(t.TempDir(), "catalog-cache.json"))
 
-	srv := New(reg, authSvc, catalogStore)
+	srv := New(reg, authSvc, catalogStore, "test-version", "https://relay.example/p/test-panel")
 	mux := http.NewServeMux()
 	srv.Routes(mux)
 
@@ -121,6 +121,14 @@ func TestAuthAndNodeLifecycle(t *testing.T) {
 	if status.NeedsSetup || !status.Authenticated {
 		t.Fatalf("expected needsSetup=false authenticated=true after setup, got %+v", status)
 	}
+	res = doJSON(t, client, http.MethodGet, ts.URL+"/api/relay/status", nil)
+	relayStatus := decodeJSON[struct {
+		Enabled   bool   `json:"enabled"`
+		PublicURL string `json:"publicUrl"`
+	}](t, res)
+	if !relayStatus.Enabled || relayStatus.PublicURL != "https://relay.example/p/test-panel" {
+		t.Fatalf("unexpected relay status: %+v", relayStatus)
+	}
 
 	// A second setup attempt must fail — only one admin account ever.
 	res = doJSON(t, client, http.MethodPost, ts.URL+"/api/auth/setup", map[string]string{
@@ -137,12 +145,25 @@ func TestAuthAndNodeLifecycle(t *testing.T) {
 		t.Fatalf("expected 200 pairing a node, got %d", res.StatusCode)
 	}
 	pairing := decodeJSON[struct {
+		ID       string `json:"id"`
+		Name     string `json:"name"`
+		Token    string `json:"token"`
+		PanelURL string `json:"panelUrl"`
+	}](t, res)
+	if pairing.ID == "" || pairing.Token == "" || pairing.Name != "my-server" || pairing.PanelURL != "https://relay.example/p/test-panel" {
+		t.Fatalf("unexpected pairing result: %+v", pairing)
+	}
+
+	// The dashboard can show a fresh one-command installer again. This rotates
+	// the secret instead of exposing the previously stored credential.
+	res = doJSON(t, client, http.MethodPost, ts.URL+"/api/nodes/"+pairing.ID+"/pairing", nil)
+	rotated := decodeJSON[struct {
 		ID    string `json:"id"`
 		Name  string `json:"name"`
 		Token string `json:"token"`
 	}](t, res)
-	if pairing.ID == "" || pairing.Token == "" || pairing.Name != "my-server" {
-		t.Fatalf("unexpected pairing result: %+v", pairing)
+	if rotated.ID != pairing.ID || rotated.Name != pairing.Name || rotated.Token == "" || rotated.Token == pairing.Token {
+		t.Fatalf("unexpected rotated pairing result: %+v", rotated)
 	}
 
 	// It shows up in the list, disconnected (no agent has connected).
@@ -173,6 +194,12 @@ func TestAuthAndNodeLifecycle(t *testing.T) {
 	res = doJSON(t, client, http.MethodGet, ts.URL+"/api/nodes/"+pairing.ID+"/containers", nil)
 	if res.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 listing containers on a disconnected node, got %d", res.StatusCode)
+	}
+	res.Body.Close()
+
+	res = doJSON(t, client, http.MethodPost, ts.URL+"/api/nodes/"+pairing.ID+"/speedtest", nil)
+	if res.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 testing speed on a disconnected node, got %d", res.StatusCode)
 	}
 	res.Body.Close()
 

@@ -13,13 +13,18 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 )
 
-const apiVersion = "v1.43"
-
 type Client struct {
-	http *http.Client
+	http    *http.Client
+	baseURL string
+
+	versionMu  sync.Mutex
+	apiVersion string
 }
 
 // New returns a client talking to the Docker daemon over the given unix
@@ -38,6 +43,7 @@ func New(socketPath string) *Client {
 				},
 			},
 		},
+		baseURL: "http://docker",
 	}
 }
 
@@ -232,8 +238,9 @@ func (c *Client) PullImage(ctx context.Context, image string) error {
 // ContainerSpec is the minimal set of options FaroOS's app catalog needs to
 // deploy a single-container app.
 type ContainerSpec struct {
-	Name  string
-	Image string
+	Name    string
+	Image   string
+	Command []string
 	// Env entries are "KEY=VALUE".
 	Env []string
 	// PortBindings maps "containerPort/proto" (e.g. "80/tcp") to a host
@@ -262,6 +269,9 @@ func (c *Client) CreateContainer(ctx context.Context, spec ContainerSpec) (strin
 			"Binds":         spec.Binds,
 			"RestartPolicy": map[string]string{"Name": "unless-stopped"},
 		},
+	}
+	if len(spec.Command) > 0 {
+		body["Cmd"] = spec.Command
 	}
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -319,7 +329,11 @@ func (c *Client) RemoveContainer(ctx context.Context, id string) error {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, method, "http://docker/"+apiVersion+path, body)
+	apiVersion, err := c.negotiateAPIVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+"/v"+apiVersion+path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -330,6 +344,57 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader) (*
 		req.Header.Set("Content-Type", "application/json")
 	}
 	return c.http.Do(req)
+}
+
+// negotiateAPIVersion asks the daemon for its supported API version instead
+// of pinning the agent to one Docker release. Docker exposes /version without
+// an API prefix specifically so clients can negotiate before making requests.
+func (c *Client) negotiateAPIVersion(ctx context.Context) (string, error) {
+	c.versionMu.Lock()
+	defer c.versionMu.Unlock()
+	if c.apiVersion != "" {
+		return c.apiVersion, nil
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/version", nil)
+	if err != nil {
+		return "", err
+	}
+	res, err := c.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("negotiate Docker API version: %w", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return "", statusErr(res)
+	}
+
+	var info struct {
+		APIVersion string `json:"ApiVersion"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&info); err != nil {
+		return "", fmt.Errorf("decode Docker API version: %w", err)
+	}
+	version, err := normalizeAPIVersion(info.APIVersion)
+	if err != nil {
+		return "", err
+	}
+	c.apiVersion = version
+	return version, nil
+}
+
+func normalizeAPIVersion(raw string) (string, error) {
+	version := strings.TrimPrefix(strings.TrimSpace(raw), "v")
+	parts := strings.Split(version, ".")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("Docker reported an invalid API version %q", raw)
+	}
+	major, majorErr := strconv.Atoi(parts[0])
+	minor, minorErr := strconv.Atoi(parts[1])
+	if majorErr != nil || minorErr != nil || major < 1 || minor < 0 {
+		return "", fmt.Errorf("Docker reported an invalid API version %q", raw)
+	}
+	return strconv.Itoa(major) + "." + strconv.Itoa(minor), nil
 }
 
 func statusErr(res *http.Response) error {

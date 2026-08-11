@@ -5,7 +5,7 @@ set -eu
 case "${1:-}" in
   0 | remove | purge)
     if command -v systemctl >/dev/null 2>&1; then
-      systemctl disable --now faroos-agent.service >/dev/null 2>&1 || true
+      systemctl disable --now faroos-agent.service faroos-agent-update.timer >/dev/null 2>&1 || true
     fi
     if [ ! -e /usr/local/bin/faroos-agent ] && [ ! -e /usr/local/bin/faroos-server ]; then
       if id -u faroos >/dev/null 2>&1; then

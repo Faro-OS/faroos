@@ -20,6 +20,18 @@ contents:
     dst: /lib/systemd/system/faroos-agent.service
     file_info:
       mode: 0644
+  - src: packaging/update.sh
+    dst: /usr/local/libexec/faroos-agent-update
+    file_info:
+      mode: 0755
+  - src: packaging/systemd/faroos-agent-update.service
+    dst: /lib/systemd/system/faroos-agent-update.service
+    file_info:
+      mode: 0644
+  - src: packaging/systemd/faroos-agent-update.timer
+    dst: /lib/systemd/system/faroos-agent-update.timer
+    file_info:
+      mode: 0644
 scripts:
   postinstall: packaging/scripts/agent-postinstall.sh
   postremove: packaging/scripts/agent-postremove.sh

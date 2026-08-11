@@ -64,6 +64,33 @@ func TestTwoPairingsGetDifferentCredentials(t *testing.T) {
 	}
 }
 
+func TestRotatePairingTokenInvalidatesPreviousCredential(t *testing.T) {
+	r := newTestRegistry(t)
+	node, err := r.CreatePairing("server-a")
+	if err != nil {
+		t.Fatalf("CreatePairing: %v", err)
+	}
+
+	rotated, err := r.RotatePairingToken(node.ID)
+	if err != nil {
+		t.Fatalf("RotatePairingToken: %v", err)
+	}
+	if rotated.Token == "" || rotated.Token == node.Token {
+		t.Fatalf("expected a fresh token, got %q", rotated.Token)
+	}
+	if _, err := r.Authenticate(node.ID, node.Token); err != ErrBadToken {
+		t.Fatalf("old token should be invalid, got %v", err)
+	}
+	if _, err := r.Authenticate(node.ID, rotated.Token); err != nil {
+		t.Fatalf("new token should authenticate: %v", err)
+	}
+
+	r.SetConnected(node.ID, true)
+	if _, err := r.RotatePairingToken(node.ID); err == nil {
+		t.Fatal("expected connected node rotation to be rejected")
+	}
+}
+
 func TestSetConnectedAndUpdateStatsPersist(t *testing.T) {
 	r := newTestRegistry(t)
 	node, err := r.CreatePairing("home-server")

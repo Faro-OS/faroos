@@ -1,0 +1,16 @@
+[Unit]
+Description=Update FaroOS node agent safely
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=-/etc/faroos/update.env
+EnvironmentFile=-/etc/faroos/agent-update.env
+ExecStart=/usr/local/libexec/faroos-agent-update --component agent
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/usr/local/bin /usr/local/libexec /var/lib/faroos
+NoNewPrivileges=true

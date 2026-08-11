@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/faroos/faroos/internal/auth"
 )
@@ -31,7 +32,8 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "username and a password of at least 8 characters are required", http.StatusBadRequest)
 		return
 	}
-	if err := s.authSvc.CreateAdmin(req.Username, req.Password); err != nil {
+	token, expiresAt, err := s.authSvc.CreateAdminSession(req.Username, req.Password)
+	if err != nil {
 		if err == auth.ErrAlreadySetUp {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
@@ -39,7 +41,7 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to create admin account", http.StatusInternalServerError)
 		return
 	}
-	s.startSession(w, req.Username, req.Password)
+	s.setSession(w, token, expiresAt)
 }
 
 func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +66,10 @@ func (s *Server) startSession(w http.ResponseWriter, _, _ string) {
 		http.Error(w, "failed to create session", http.StatusInternalServerError)
 		return
 	}
+	s.setSession(w, token, expiresAt)
+}
+
+func (s *Server) setSession(w http.ResponseWriter, token string, expiresAt time.Time) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    token,

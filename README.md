@@ -59,11 +59,17 @@ Install the central panel, then open `http://<hostname>:8090` to create the firs
 curl -fsSL https://raw.githubusercontent.com/Faro-OS/faroos/main/packaging/install.sh | sudo bash -s -- server
 ```
 
+The installer also enables verified automatic updates. FaroOS checks the latest published release hourly (with a randomized delay), validates SHA-256 checksums, keeps recoverable backups, and rolls back if the updated service does not start.
+
 On each managed server, use Dashboard → Add server in the panel, then install the agent and follow the printed pairing instructions:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Faro-OS/faroos/main/packaging/install.sh | sudo bash -s -- agent
 ```
+
+Agents installed from the dashboard receive the same automatic updater. The pairing dialog accepts a public HTTPS domain or mesh-VPN address for servers in other networks; agents connect outbound and then retrieve future agent builds through that reachable panel. No recurring administrator command is required.
+
+FaroOS also includes its own optional [FaroOS Relay](docs/relay.md). With a relay configured, panels and managed servers can both remain behind NAT: “Add server” produces a one-line command that works from any network without Tailscale, a VPN, port forwarding, or a public IP on either machine.
 
 Prebuilt `.deb` and `.rpm` packages are also available from GitHub Releases.
 

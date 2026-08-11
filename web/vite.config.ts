@@ -11,6 +11,12 @@ export default defineConfig({
 				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
 				runes: ({ filename }) => filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
+			version: {
+				// Keep already-open FaroOS tabs in sync with the panel binary.
+				// When an update lands, SvelteKit notices the new build and the
+				// root layout reloads the interface without user intervention.
+				pollInterval: 15_000
+			},
 			adapter: adapter({
 				// Output straight into the Go module so cmd/server can
 				// go:embed it (see internal/webui) — the binary ships with

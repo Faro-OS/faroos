@@ -20,6 +20,18 @@ contents:
     dst: /lib/systemd/system/faroos-server.service
     file_info:
       mode: 0644
+  - src: packaging/update.sh
+    dst: /usr/local/libexec/faroos-server-update
+    file_info:
+      mode: 0755
+  - src: packaging/systemd/faroos-server-update.service
+    dst: /lib/systemd/system/faroos-server-update.service
+    file_info:
+      mode: 0644
+  - src: packaging/systemd/faroos-server-update.timer
+    dst: /lib/systemd/system/faroos-server-update.timer
+    file_info:
+      mode: 0644
 scripts:
   postinstall: packaging/scripts/server-postinstall.sh
   postremove: packaging/scripts/server-postremove.sh

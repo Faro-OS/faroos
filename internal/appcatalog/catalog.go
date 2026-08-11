@@ -42,6 +42,10 @@ type App struct {
 	Ports       []Port   `json:"ports"`
 	Volumes     []Volume `json:"volumes"`
 	Env         []EnvVar `json:"env,omitempty"`
+	// Arguments overrides the image's default command without invoking a
+	// shell. Imported catalogs use this for services such as cloudflared,
+	// whose image default only prints its version and exits.
+	Arguments string `json:"arguments,omitempty"`
 }
 
 var Curated = []App{
@@ -122,6 +126,7 @@ type DeploySpec struct {
 	Ports   []Port   `json:"ports"`
 	Volumes []Volume `json:"volumes"`
 	Env     []EnvVar `json:"env"`
+	Command []string `json:"command,omitempty"`
 }
 
 // ContainerName is the deterministic Docker container name FaroOS gives a

@@ -82,3 +82,27 @@ func TestCannotDeleteRoot(t *testing.T) {
 		t.Fatal("expected deleting the root path to fail")
 	}
 }
+
+func TestMkdirAndRename(t *testing.T) {
+	dir := t.TempDir()
+	root, err := NewRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Mkdir("data/projects"); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	if err := root.WriteFile("data/projects/old.txt", []byte("content")); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := root.Rename("data/projects/old.txt", "data/projects/new.txt"); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if _, err := root.ReadFile("data/projects/old.txt"); err == nil {
+		t.Fatal("old path still exists after rename")
+	}
+	data, err := root.ReadFile("data/projects/new.txt")
+	if err != nil || string(data) != "content" {
+		t.Fatalf("renamed file = %q, %v", data, err)
+	}
+}

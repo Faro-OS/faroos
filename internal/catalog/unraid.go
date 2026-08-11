@@ -39,6 +39,7 @@ type feedApp struct {
 	Icon         string      `json:"Icon"`
 	CategoryList stringSlice `json:"CategoryList"`
 	Config       configList  `json:"Config"`
+	PostArgs     string      `json:"PostArgs"`
 }
 
 type feedConfigAttrs struct {
@@ -236,6 +237,7 @@ func convertFeedApp(fa feedApp) (appcatalog.App, bool) {
 		Ports:       ports,
 		Volumes:     volumes,
 		Env:         env,
+		Arguments:   strings.TrimSpace(fa.PostArgs),
 	}, true
 }
 

@@ -31,6 +31,7 @@ fi
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload || true
   systemctl enable faroos-agent.service || true
+  systemctl enable --now faroos-agent-update.timer || true
 fi
 
 if [ ! -f /etc/faroos/agent.env ]; then

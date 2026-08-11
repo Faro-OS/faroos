@@ -65,10 +65,12 @@ func isWithin(base, path string) bool {
 }
 
 type Entry struct {
-	Name    string    `json:"name"`
-	IsDir   bool      `json:"isDir"`
-	Size    int64     `json:"size"`
-	ModTime time.Time `json:"modTime"`
+	Name      string    `json:"name"`
+	IsDir     bool      `json:"isDir"`
+	IsSymlink bool      `json:"isSymlink"`
+	Size      int64     `json:"size"`
+	Mode      string    `json:"mode"`
+	ModTime   time.Time `json:"modTime"`
 }
 
 func (r *Root) List(relPath string) ([]Entry, error) {
@@ -87,10 +89,12 @@ func (r *Root) List(relPath string) ([]Entry, error) {
 			continue
 		}
 		entries = append(entries, Entry{
-			Name:    de.Name(),
-			IsDir:   de.IsDir(),
-			Size:    info.Size(),
-			ModTime: info.ModTime(),
+			Name:      de.Name(),
+			IsDir:     de.IsDir(),
+			IsSymlink: de.Type()&os.ModeSymlink != 0,
+			Size:      info.Size(),
+			Mode:      info.Mode().String(),
+			ModTime:   info.ModTime(),
 		})
 	}
 	sort.Slice(entries, func(i, j int) bool {
@@ -132,6 +136,36 @@ func (r *Root) WriteFile(relPath string, data []byte) error {
 		return err
 	}
 	return os.WriteFile(full, data, 0o644)
+}
+
+// Mkdir creates a directory and its missing parents inside the configured
+// root. Existing directories are treated as success, matching mkdir -p.
+func (r *Root) Mkdir(relPath string) error {
+	full, err := r.resolve(relPath)
+	if err != nil {
+		return err
+	}
+	if full == r.base {
+		return errors.New("cannot create the root directory")
+	}
+	return os.MkdirAll(full, 0o755)
+}
+
+// Rename moves a file or directory inside the configured root. Both sides
+// are resolved independently so neither can escape the file manager root.
+func (r *Root) Rename(fromPath, toPath string) error {
+	from, err := r.resolve(fromPath)
+	if err != nil {
+		return err
+	}
+	to, err := r.resolve(toPath)
+	if err != nil {
+		return err
+	}
+	if from == r.base || to == r.base {
+		return errors.New("cannot rename the root directory")
+	}
+	return os.Rename(from, to)
 }
 
 // Delete removes a single file or an empty directory. Deliberately not

@@ -2,9 +2,111 @@ package dockerclient
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func TestNegotiatesDaemonAPIVersion(t *testing.T) {
+	var versionRequests atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /version", func(w http.ResponseWriter, _ *http.Request) {
+		versionRequests.Add(1)
+		json.NewEncoder(w).Encode(map[string]string{"ApiVersion": "1.44"})
+	})
+	mux.HandleFunc("GET /v1.44/containers/json", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("all") != "true" {
+			t.Errorf("expected all=true, got %q", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte("[]"))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := &Client{http: server.Client(), baseURL: server.URL}
+	for range 2 {
+		containers, err := client.ListContainers(context.Background())
+		if err != nil {
+			t.Fatalf("ListContainers: %v", err)
+		}
+		if len(containers) != 0 {
+			t.Fatalf("expected no containers, got %d", len(containers))
+		}
+	}
+	if got := versionRequests.Load(); got != 1 {
+		t.Fatalf("expected API negotiation once, got %d requests", got)
+	}
+}
+
+func TestNormalizeAPIVersion(t *testing.T) {
+	for _, test := range []struct {
+		input string
+		want  string
+		ok    bool
+	}{
+		{input: "1.44", want: "1.44", ok: true},
+		{input: "v1.53", want: "1.53", ok: true},
+		{input: "", ok: false},
+		{input: "latest", ok: false},
+		{input: "1.44.1", ok: false},
+	} {
+		got, err := normalizeAPIVersion(test.input)
+		if test.ok && (err != nil || got != test.want) {
+			t.Errorf("normalizeAPIVersion(%q) = %q, %v; want %q", test.input, got, err, test.want)
+		}
+		if !test.ok && err == nil {
+			t.Errorf("normalizeAPIVersion(%q) unexpectedly succeeded with %q", test.input, got)
+		}
+	}
+}
+
+func TestCreateContainerSendsExecFormCommand(t *testing.T) {
+	var received struct {
+		Image string   `json:"Image"`
+		Cmd   []string `json:"Cmd"`
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1.44/containers/create", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("name"); got != "cloudflare" {
+			t.Errorf("container name = %q, want cloudflare", got)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Errorf("decode create payload: %v", err)
+			http.Error(w, "bad payload", http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]string{"Id": "container-id"})
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := &Client{http: server.Client(), baseURL: server.URL, apiVersion: "1.44"}
+	id, err := client.CreateContainer(context.Background(), ContainerSpec{
+		Name:    "cloudflare",
+		Image:   "cloudflare/cloudflared:latest",
+		Command: []string{"tunnel", "run", "--token", "secret"},
+	})
+	if err != nil {
+		t.Fatalf("CreateContainer: %v", err)
+	}
+	if id != "container-id" {
+		t.Fatalf("container id = %q, want container-id", id)
+	}
+	want := []string{"tunnel", "run", "--token", "secret"}
+	if len(received.Cmd) != len(want) {
+		t.Fatalf("Cmd = %#v, want %#v", received.Cmd, want)
+	}
+	for i := range want {
+		if received.Cmd[i] != want[i] {
+			t.Fatalf("Cmd = %#v, want %#v", received.Cmd, want)
+		}
+	}
+}
 
 // TestAgainstLocalDaemon exercises the client against whatever Docker
 // daemon is available on the machine running the test. It skips cleanly if

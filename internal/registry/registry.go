@@ -102,6 +102,32 @@ func (r *Registry) Authenticate(id, token string) (*model.Node, error) {
 	return n, nil
 }
 
+// RotatePairingToken issues fresh credentials for a node that has not yet
+// connected. The old installation command stops working immediately, so the
+// UI can safely show a newly generated command without ever reading the
+// existing long-lived token back through the API.
+func (r *Registry) RotatePairingToken(id string) (*model.Node, error) {
+	token, err := randomHex(32)
+	if err != nil {
+		return nil, err
+	}
+	result, err := r.db.Exec(`UPDATE nodes SET token = ? WHERE id = ? AND connected = 0`, token, id)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if updated == 0 {
+		if _, err := r.Get(id); err != nil {
+			return nil, err
+		}
+		return nil, errors.New("connected nodes cannot rotate pairing credentials")
+	}
+	return r.Get(id)
+}
+
 func (r *Registry) SetConnected(id string, connected bool) {
 	r.db.Exec(
 		`UPDATE nodes SET connected = ?, last_seen = ? WHERE id = ?`,

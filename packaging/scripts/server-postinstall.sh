@@ -24,4 +24,5 @@ chown -R -h faroos:faroos /var/lib/faroos/server
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload || true
   systemctl enable faroos-server.service || true
+  systemctl enable --now faroos-server-update.timer || true
 fi

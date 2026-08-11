@@ -49,7 +49,7 @@ jobs:
         with:
           name: faroos-web-dist
           path: internal/webui/dist
-      - name: Build server + agent
+      - name: Build server + agent + relay
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -60,6 +60,9 @@ jobs:
           if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
           go build -ldflags "-X main.version=${GITHUB_REF_NAME}" -o "dist/faroos-server-$GOOS-$GOARCH$ext" ./cmd/server
           go build -ldflags "-X main.version=${GITHUB_REF_NAME}" -o "dist/faroos-agent-$GOOS-$GOARCH$ext" ./cmd/agent
+          if [ "$GOOS" = "linux" ]; then
+            go build -ldflags "-X main.version=${GITHUB_REF_NAME}" -o "dist/faroos-relay-$GOOS-$GOARCH" ./cmd/relay
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: faroos-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -131,6 +134,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -140,14 +144,23 @@ jobs:
           find artifacts -type f \( \
             -name 'faroos-server-*' -o \
             -name 'faroos-agent-*' -o \
+            -name 'faroos-relay-*' -o \
             -name '*.deb' -o \
             -name '*.rpm' -o \
             -name '*.iso' -o \
             -name '*.CREDENTIALS.txt' \
           \) -exec cp {} release/ \;
+          cp packaging/update.sh release/faroos-update
+          chmod 0755 release/faroos-update
+          (
+            cd release
+            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' \
+              | sort -z \
+              | xargs -0 sha256sum > SHA256SUMS
+          )
           ls -la release/
       - uses: softprops/action-gh-release@v2
         with:
           files: release/*
           generate_release_notes: true
-          draft: true
+          draft: false

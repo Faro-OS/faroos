@@ -22,6 +22,8 @@ import (
 	"github.com/faroos/faroos/internal/appcatalog"
 	"github.com/faroos/faroos/internal/dockerclient"
 	"github.com/faroos/faroos/internal/fileops"
+	"github.com/faroos/faroos/internal/netspeed"
+	"github.com/faroos/faroos/internal/p2p"
 	"github.com/faroos/faroos/internal/proto"
 	"github.com/faroos/faroos/internal/sysstats"
 	"github.com/faroos/faroos/internal/termsession"
@@ -32,16 +34,34 @@ import (
 // has to be a var, not a const, for -X to be able to touch it.
 var version = "0.0.1-dev"
 
+const (
+	heartbeatInterval = 10 * time.Second
+	heartbeatTimeout  = 30 * time.Second
+)
+
 // deps bundles the agent's local capabilities so they can be threaded
 // through the command dispatcher without an ever-growing parameter list.
 type deps struct {
 	docker    *dockerclient.Client
 	files     *fileops.Root
 	terminals *termsession.Manager
+	network   *netspeed.Tester
 	appsDir   string
 }
 
+type jsonConnection interface {
+	ReadJSON(any) error
+	WriteJSON(any) error
+	SetReadDeadline(time.Time) error
+	Close() error
+}
+
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "version") {
+		fmt.Println(version)
+		return
+	}
+
 	serverURL := requireEnv("FAROOS_SERVER") // e.g. ws://panel.example.com/api/agent/connect
 	nodeID := requireEnv("FAROOS_NODE_ID")
 	token := requireEnv("FAROOS_TOKEN")
@@ -82,6 +102,7 @@ func main() {
 		docker:    dockerclient.New(dockerSocket),
 		files:     files,
 		terminals: termsession.NewManager(),
+		network:   netspeed.New(),
 		appsDir:   appsDir,
 	}
 
@@ -94,7 +115,7 @@ func main() {
 }
 
 func runOnce(serverURL, nodeID, token string, d *deps) error {
-	conn, _, err := websocket.DefaultDialer.Dial(serverURL, nil)
+	conn, transport, err := dialAgentConnection(serverURL, nodeID, token)
 	if err != nil {
 		return err
 	}
@@ -107,25 +128,26 @@ func runOnce(serverURL, nodeID, token string, d *deps) error {
 		return conn.WriteJSON(v)
 	}
 
-	if err := writeJSON(proto.Envelope{
-		Type: proto.TypeHello,
-		Hello: &proto.Hello{
-			NodeID:  nodeID,
-			Token:   token,
-			Version: version,
-		},
-	}); err != nil {
+	log.Printf("connected to %s as node %s via %s", serverURL, nodeID, transport)
+
+	// A one-second cadence keeps the dashboard genuinely live while remaining
+	// cheap: every snapshot is read from local kernel counters.
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	statsCollector := sysstats.NewCollector()
+
+	stats := statsCollector.Collect()
+	if err := writeJSON(proto.Envelope{Type: proto.TypeStats, Stats: &stats}); err != nil {
 		return err
 	}
-
-	log.Printf("connected to %s as node %s", serverURL, nodeID)
-
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
 
 	errCh := make(chan error, 1)
 	go func() {
 		for {
+			if err := conn.SetReadDeadline(time.Now().Add(heartbeatTimeout)); err != nil {
+				errCh <- err
+				return
+			}
 			var env proto.Envelope
 			if err := conn.ReadJSON(&env); err != nil {
 				errCh <- err
@@ -148,16 +170,112 @@ func runOnce(serverURL, nodeID, token string, d *deps) error {
 		}
 	}()
 
+	heartbeat := time.NewTicker(heartbeatInterval)
+	defer heartbeat.Stop()
 	for {
 		select {
 		case err := <-errCh:
 			return err
+		case <-heartbeat.C:
+			if err := writeJSON(proto.Envelope{Type: proto.TypePing}); err != nil {
+				return err
+			}
 		case <-ticker.C:
-			stats := sysstats.Collect()
+			stats := statsCollector.Collect()
 			if err := writeJSON(proto.Envelope{Type: proto.TypeStats, Stats: &stats}); err != nil {
 				return err
 			}
 		}
+	}
+}
+
+func dialAgentConnection(serverURL, nodeID, token string) (jsonConnection, string, error) {
+	p2pDisabled := envTruthy("FAROOS_P2P_DISABLED")
+	dialer := *websocket.DefaultDialer
+	if !p2pDisabled {
+		dialer.Subprotocols = []string{p2p.Subprotocol}
+	}
+	websocketConn, _, err := dialer.Dial(serverURL, nil)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var (
+		peer  *p2p.Peer
+		offer string
+	)
+	if !p2pDisabled && websocketConn.Subprotocol() == p2p.Subprotocol {
+		stunURL := strings.TrimSpace(os.Getenv("FAROOS_STUN_URL"))
+		if stunURL == "" {
+			stunURL = p2p.DefaultSTUNURL
+		}
+		offerCtx, cancelOffer := context.WithTimeout(context.Background(), 8*time.Second)
+		peer, offer, err = p2p.NewOffer(offerCtx, stunURL)
+		cancelOffer()
+		if err != nil {
+			log.Printf("direct P2P offer unavailable, using relay: %v", err)
+			peer = nil
+			offer = ""
+		}
+	}
+
+	if err := websocketConn.WriteJSON(proto.Envelope{
+		Type: proto.TypeHello,
+		Hello: &proto.Hello{
+			NodeID:   nodeID,
+			Token:    token,
+			Version:  version,
+			P2POffer: offer,
+		},
+	}); err != nil {
+		if peer != nil {
+			peer.Close()
+		}
+		websocketConn.Close()
+		return nil, "", err
+	}
+	if peer == nil {
+		return websocketConn, "relay", nil
+	}
+
+	websocketConn.SetReadDeadline(time.Now().Add(12 * time.Second))
+	var response proto.Envelope
+	if err := websocketConn.ReadJSON(&response); err != nil {
+		peer.Close()
+		websocketConn.Close()
+		return nil, "", fmt.Errorf("read P2P answer: %w", err)
+	}
+	websocketConn.SetReadDeadline(time.Time{})
+	if response.Type != proto.TypeP2PAnswer || response.P2PAnswer == nil || response.P2PAnswer.SDP == "" {
+		peer.Close()
+		if response.P2PAnswer != nil && response.P2PAnswer.Error != "" {
+			log.Printf("direct P2P unavailable, using relay: %s", response.P2PAnswer.Error)
+		}
+		return websocketConn, "relay", nil
+	}
+	if err := peer.SetAnswer(response.P2PAnswer.SDP); err != nil {
+		peer.Close()
+		log.Printf("direct P2P answer rejected, using relay: %v", err)
+		return websocketConn, "relay", nil
+	}
+	directCtx, cancelDirect := context.WithTimeout(context.Background(), 12*time.Second)
+	direct, err := peer.Connect(directCtx)
+	cancelDirect()
+	if err != nil {
+		peer.Close()
+		log.Printf("direct path unavailable, using relay: %v", err)
+		return websocketConn, "relay", nil
+	}
+	websocketConn.Close()
+	return direct, "direct-p2p", nil
+}
+
+func envTruthy(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -166,6 +284,8 @@ func handleCommand(d *deps, cmd proto.Command, writeJSON func(any) error) {
 	if cmd.Action == "apps.deploy" {
 		// Pulling a cold image can take minutes on a slow connection.
 		timeout = 10 * time.Minute
+	} else if cmd.Action == "network.speedtest" {
+		timeout = 65 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -209,6 +329,11 @@ type pathParams struct {
 type writeFileParams struct {
 	Path       string `json:"path"`
 	ContentB64 string `json:"contentB64"`
+}
+
+type renameFileParams struct {
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 func dispatch(ctx context.Context, d *deps, cmd proto.Command) (any, error) {
@@ -279,6 +404,20 @@ func dispatch(ctx context.Context, d *deps, cmd proto.Command) (any, error) {
 		}
 		return nil, d.files.Delete(p.Path)
 
+	case "files.mkdir":
+		var p pathParams
+		if err := json.Unmarshal(cmd.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, d.files.Mkdir(p.Path)
+
+	case "files.rename":
+		var p renameFileParams
+		if err := json.Unmarshal(cmd.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, d.files.Rename(p.From, p.To)
+
 	case "apps.deploy":
 		var spec appcatalog.DeploySpec
 		if err := json.Unmarshal(cmd.Params, &spec); err != nil {
@@ -299,6 +438,9 @@ func dispatch(ctx context.Context, d *deps, cmd proto.Command) (any, error) {
 			return nil, err
 		}
 		return inspectPort(ctx, d, p.Port)
+
+	case "network.speedtest":
+		return d.network.Run(ctx)
 
 	default:
 		return nil, unknownActionError(cmd.Action)
@@ -401,6 +543,7 @@ func deployApp(ctx context.Context, d *deps, spec appcatalog.DeploySpec) error {
 		Name:         containerName,
 		Image:        spec.Image,
 		Env:          env,
+		Command:      spec.Command,
 		PortBindings: portBindings,
 		Binds:        binds,
 	})

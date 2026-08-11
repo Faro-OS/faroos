@@ -1,0 +1,31 @@
+services:
+  faroos-relay:
+    build:
+      context: ../..
+      dockerfile: packaging/relay/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3478:3478/udp"
+    volumes:
+      - relay-data:/data
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      faroos-relay:
+        condition: service_healthy
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN:?set RELAY_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  relay-data:
+  caddy-data:
+  caddy-config:

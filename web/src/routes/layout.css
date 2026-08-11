@@ -3,108 +3,456 @@
 
 :root,
 :root[data-theme='light'] {
-	--bg: #f3f4f7;
-	--surface: #ffffff;
-	--surface-raised: #ffffff;
-	--border: #e5e7eb;
-	--track: #eef0f3;
-	--fg: #16181d;
-	--fg-muted: #52565e;
-	--fg-subtle: #8b8f98;
-	--accent: #0d9488;
+	color-scheme: light;
+	--bg: #eaf1fb;
+	--bg-elevated: #f5f8fc;
+	--surface: rgba(255, 255, 255, 0.66);
+	--surface-solid: #ffffff;
+	--surface-raised: rgba(255, 255, 255, 0.84);
+	--surface-hover: rgba(255, 255, 255, 0.97);
+	--chrome: rgba(248, 251, 255, 0.68);
+	--border: rgba(41, 73, 116, 0.12);
+	--border-strong: rgba(41, 73, 116, 0.2);
+	--track: rgba(120, 120, 128, 0.1);
+	--fg: #1d1d1f;
+	--fg-muted: #5c5c61;
+	--fg-subtle: #86868b;
+	--accent: #007aff;
+	--accent-hover: #006ee6;
+	--accent-soft: rgba(0, 122, 255, 0.11);
 	--accent-fg: #ffffff;
-	--sidebar-bg: #ffffff;
-	--wallpaper: linear-gradient(160deg, #3b5b7a 0%, #24405c 35%, #16233a 70%, #0d1520 100%);
+	--success: #28a745;
+	--warning: #d98400;
+	--danger: #e43d46;
+	--sidebar-bg: rgba(246, 246, 248, 0.76);
+	--radius-sm: 0.75rem;
+	--radius-md: 1rem;
+	--radius-lg: 1.375rem;
+	--radius-xl: 1.75rem;
+	--motion-snap: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--motion-settle: cubic-bezier(0.16, 1, 0.3, 1);
+	--wallpaper:
+		radial-gradient(circle at 12% -8%, rgba(255, 255, 255, 0.14), transparent 31%),
+		radial-gradient(circle at 92% 112%, rgba(255, 255, 255, 0.07), transparent 38%),
+		linear-gradient(145deg, #292a2f 0%, #17181c 54%, #202126 100%);
+	--shadow-sm: 0 1px 2px rgba(20, 47, 84, 0.04), 0 14px 38px rgba(34, 75, 128, 0.08);
+	--shadow-md: 0 22px 64px rgba(34, 72, 122, 0.16), 0 3px 12px rgba(20, 47, 84, 0.06);
+	--shadow-xl: 0 34px 100px rgba(4, 10, 24, 0.25), 0 5px 20px rgba(4, 10, 24, 0.11);
 }
 
 :root[data-theme='dark'] {
-	--bg: #0f1115;
-	--surface: #171a21;
-	--surface-raised: #1d212a;
-	--border: #262b35;
-	--track: #262b35;
-	--fg: #f1f2f4;
-	--fg-muted: #b0b4bd;
-	--fg-subtle: #6b7280;
-	--accent: #2dd4bf;
-	--accent-fg: #062521;
-	--sidebar-bg: #12141a;
-	--wallpaper: linear-gradient(160deg, #1a2b3d 0%, #101c2c 35%, #0a121e 70%, #05080d 100%);
+	color-scheme: dark;
+	--bg: #070b14;
+	--bg-elevated: #0c1220;
+	--surface: rgba(18, 27, 44, 0.7);
+	--surface-solid: #121a29;
+	--surface-raised: rgba(25, 36, 56, 0.88);
+	--surface-hover: rgba(34, 48, 73, 0.96);
+	--chrome: rgba(11, 17, 29, 0.7);
+	--border: rgba(171, 203, 255, 0.1);
+	--border-strong: rgba(181, 211, 255, 0.19);
+	--track: rgba(118, 118, 128, 0.18);
+	--fg: #f5f5f7;
+	--fg-muted: #c7c7cc;
+	--fg-subtle: #8e8e93;
+	--accent: #0a84ff;
+	--accent-hover: #409cff;
+	--accent-soft: rgba(10, 132, 255, 0.16);
+	--accent-fg: #07101e;
+	--success: #30d158;
+	--warning: #ffd60a;
+	--danger: #ff453a;
+	--sidebar-bg: rgba(15, 23, 38, 0.78);
+	--wallpaper:
+		radial-gradient(circle at 12% -8%, rgba(255, 255, 255, 0.11), transparent 31%),
+		radial-gradient(circle at 92% 112%, rgba(255, 255, 255, 0.055), transparent 38%),
+		linear-gradient(145deg, #25262b 0%, #111216 54%, #1a1b1f 100%);
+	--shadow-sm: 0 1px 1px rgba(0, 0, 0, 0.28), 0 12px 32px rgba(0, 0, 0, 0.16);
+	--shadow-md: 0 20px 60px rgba(0, 0, 0, 0.38), 0 3px 10px rgba(0, 0, 0, 0.22);
+	--shadow-xl: 0 32px 100px rgba(0, 0, 0, 0.58), 0 4px 18px rgba(0, 0, 0, 0.32);
 }
 
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme='light']) {
-		--bg: #0f1115;
-		--surface: #171a21;
-		--surface-raised: #1d212a;
-		--border: #262b35;
-		--track: #262b35;
-		--fg: #f1f2f4;
-		--fg-muted: #b0b4bd;
-		--fg-subtle: #6b7280;
-		--accent: #2dd4bf;
-		--accent-fg: #062521;
-		--sidebar-bg: #12141a;
-		--wallpaper: linear-gradient(160deg, #1a2b3d 0%, #101c2c 35%, #0a121e 70%, #05080d 100%);
+		color-scheme: dark;
+		--bg: #070b14;
+		--bg-elevated: #0c1220;
+		--surface: rgba(18, 27, 44, 0.7);
+		--surface-solid: #121a29;
+		--surface-raised: rgba(25, 36, 56, 0.88);
+		--surface-hover: rgba(34, 48, 73, 0.96);
+		--chrome: rgba(11, 17, 29, 0.7);
+		--border: rgba(171, 203, 255, 0.1);
+		--border-strong: rgba(181, 211, 255, 0.19);
+		--track: rgba(118, 118, 128, 0.18);
+		--fg: #f5f5f7;
+		--fg-muted: #c7c7cc;
+		--fg-subtle: #8e8e93;
+		--accent: #0a84ff;
+		--accent-hover: #409cff;
+		--accent-soft: rgba(10, 132, 255, 0.16);
+		--accent-fg: #07101e;
+		--success: #30d158;
+		--warning: #ffd60a;
+		--danger: #ff453a;
+		--sidebar-bg: rgba(15, 23, 38, 0.78);
 	}
 }
 
 html,
 body {
 	height: 100%;
+	margin: 0;
 	background: var(--bg);
 	color: var(--fg);
+	overscroll-behavior: none;
 }
 
 body {
 	font-family:
-		-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Inter', system-ui,
+		-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', Inter, system-ui,
 		'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	text-rendering: optimizeLegibility;
+	font-optical-sizing: auto;
+	letter-spacing: 0;
+	line-height: 1.5;
 }
 
-/* A calmer default easing for anything using Tailwind's transition
-   utilities, closer to macOS's own motion curves than the linear/ease
-   defaults. */
+h1,
+h2,
+h3,
+h4 {
+	font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+	font-optical-sizing: auto;
+	text-wrap: balance;
+}
+
+button,
+input,
+select,
+textarea {
+	font: inherit;
+}
+
+button,
+a,
+select {
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+}
+
+button:not(:disabled),
+a,
+select:not(:disabled) {
+	cursor: pointer;
+}
+
+button,
+a {
+	transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease,
+		box-shadow 220ms var(--motion-snap), opacity 180ms ease, scale 120ms ease;
+}
+
+button:not(:disabled):active,
+a:active {
+	scale: 0.975;
+}
+
+button:disabled {
+	cursor: default;
+}
+
+::selection {
+	background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
 * {
-	transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+	box-sizing: border-box;
+	transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+	scrollbar-width: thin;
+	scrollbar-color: color-mix(in srgb, var(--fg) 16%, transparent) transparent;
 }
 
-/* Apple's "Liquid Glass" material (iOS 26 / macOS): heavy blur + boosted
-   saturation so background content reads through tinted, a hairline
-   border that catches light unevenly (brighter on top, like a real
-   refractive edge), and an inset highlight instead of a flat border.
-   Reserved for floating chrome (dock, dialogs, toasts) — Apple itself
-   never puts glass under dense data (tables, lists), only over content,
-   so the rest of the app (tables, forms) stays on flat --surface for
-   legibility. Two variants: `.glass` sits on the app's own themed
-   background (dialogs/toasts), `.glass-dark` sits over the wallpaper/dock
-   which is always dark regardless of light/dark theme. */
+*:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+	outline-offset: 3px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+	outline: none;
+	border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+	box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.app-frame {
+	position: relative;
+	isolation: isolate;
+	height: 100dvh;
+	overflow: hidden;
+	background:
+		radial-gradient(ellipse at 4% -8%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 38%),
+		radial-gradient(ellipse at 98% 2%, color-mix(in srgb, #8b5cf6 14%, transparent), transparent 34%),
+		radial-gradient(ellipse at 72% 108%, color-mix(in srgb, #34c759 9%, transparent), transparent 34%),
+		var(--bg);
+}
+
+.app-frame,
+.surface-card,
+.premium-card {
+	transition: background-color 320ms ease, border-color 260ms ease, color 220ms ease,
+		box-shadow 320ms var(--motion-settle);
+}
+
+.app-frame::before,
+.app-frame::after {
+	position: absolute;
+	z-index: -1;
+	width: 28rem;
+	height: 28rem;
+	content: '';
+	filter: blur(120px);
+	opacity: 0.2;
+	pointer-events: none;
+}
+
+.app-frame::before {
+	top: -17rem;
+	right: -8rem;
+	background: #a8adb7;
+}
+
+.app-frame::after {
+	bottom: -20rem;
+	left: -10rem;
+	background: #858b96;
+}
+
+.app-scroll {
+	height: 100%;
+	overflow-x: hidden;
+	overflow-y: auto;
+	scroll-behavior: smooth;
+}
+
+.launch-screen {
+	width: 100vw;
+	height: 100dvh;
+	display: grid;
+	place-items: center;
+	background: var(--bg);
+}
+
+.launch-content {
+	display: grid;
+	justify-items: center;
+	gap: 0.9rem;
+	color: var(--fg-subtle);
+	font-size: 0.75rem;
+}
+
+.launch-icon {
+	width: 3.25rem;
+	height: 3.25rem;
+	display: grid;
+	place-items: center;
+	padding: 0.35rem;
+	border: 1px solid var(--border);
+	border-radius: 1.05rem;
+	background: var(--surface-raised);
+	box-shadow: var(--shadow-md);
+	animation: launch-breathe 1.25s ease-in-out infinite alternate;
+}
+
+.launch-icon img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
 .glass {
-	background: color-mix(in srgb, var(--surface) 75%, transparent);
-	backdrop-filter: blur(28px) saturate(1.8);
-	-webkit-backdrop-filter: blur(28px) saturate(1.8);
-	/* border-width/color set separately (not the `border` shorthand) so a
-	   utility class like Tailwind's border-dashed can still override just
-	   the style without losing the color/width here. */
-	border-width: 1px;
-	border-color: color-mix(in srgb, var(--fg) 12%, transparent);
-	border-style: solid;
+	background: color-mix(in srgb, var(--surface-raised) 78%, transparent);
+	border: 1px solid var(--border-strong);
 	box-shadow:
-		inset 0 1px 0 0 color-mix(in srgb, white 30%, transparent),
-		0 20px 50px -12px rgba(0, 0, 0, 0.35);
+		inset 0 1px 0 color-mix(in srgb, white 26%, transparent),
+		var(--shadow-xl);
+	backdrop-filter: blur(40px) saturate(1.65);
+	-webkit-backdrop-filter: blur(40px) saturate(1.65);
 }
 
 .glass-dark {
-	background: color-mix(in srgb, black 30%, transparent);
-	backdrop-filter: blur(30px) saturate(1.7);
-	-webkit-backdrop-filter: blur(30px) saturate(1.7);
-	border-width: 1px;
-	border-color: rgba(255, 255, 255, 0.16);
-	border-style: solid;
+	background: rgba(13, 16, 24, 0.46);
+	border: 1px solid rgba(255, 255, 255, 0.13);
 	box-shadow:
-		inset 0 1px 0 0 rgba(255, 255, 255, 0.22),
-		0 16px 44px -12px rgba(0, 0, 0, 0.6);
+		inset 0 1px 0 rgba(255, 255, 255, 0.15),
+		0 24px 64px rgba(0, 0, 0, 0.28);
+	backdrop-filter: blur(34px) saturate(1.7);
+	-webkit-backdrop-filter: blur(34px) saturate(1.7);
+}
+
+.surface-card {
+	background: linear-gradient(145deg, color-mix(in srgb, var(--surface-raised) 82%, transparent), var(--surface));
+	border: 1px solid var(--border);
+	box-shadow: inset 0 1px 0 color-mix(in srgb, white 17%, transparent), var(--shadow-sm);
+	backdrop-filter: blur(28px) saturate(1.45);
+	-webkit-backdrop-filter: blur(28px) saturate(1.45);
+}
+
+.premium-card {
+	position: relative;
+	overflow: hidden;
+	background: linear-gradient(145deg, color-mix(in srgb, var(--surface-raised) 92%, transparent), var(--surface));
+	border: 1px solid var(--border);
+	box-shadow: inset 0 1px 0 color-mix(in srgb, white 18%, transparent), var(--shadow-sm);
+	backdrop-filter: blur(30px) saturate(1.5);
+	-webkit-backdrop-filter: blur(30px) saturate(1.5);
+	transition: border-color 220ms ease, box-shadow 280ms var(--motion-snap), translate 280ms var(--motion-snap);
+}
+
+.premium-card::before {
+	position: absolute;
+	top: 0;
+	left: 12%;
+	width: 76%;
+	height: 1px;
+	content: '';
+	background: linear-gradient(90deg, transparent, color-mix(in srgb, white 48%, transparent), transparent);
+	opacity: 0.45;
+}
+
+.eyebrow {
+	font-size: 0.66rem;
+	font-weight: 700;
+	line-height: 1;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--fg-subtle);
+}
+
+.control {
+	min-height: 2.75rem;
+	border: 1px solid var(--border);
+	background: color-mix(in srgb, var(--surface-raised) 84%, transparent);
+	box-shadow: inset 0 1px 0 color-mix(in srgb, white 18%, transparent), 0 1px 2px rgba(0, 0, 0, 0.025);
+	backdrop-filter: blur(16px) saturate(1.3);
+	-webkit-backdrop-filter: blur(16px) saturate(1.3);
+	transition: border-color 180ms ease, background 180ms ease, box-shadow 220ms var(--motion-snap), scale 120ms ease;
+}
+
+.control:hover {
+	border-color: var(--border-strong);
+	background: var(--surface-hover);
+}
+
+.control:focus-within {
+	border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+	box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.control:active,
+.primary-control:active {
+	transition-duration: 80ms;
+}
+
+.primary-control {
+	color: white;
+	background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, white), var(--accent));
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.25),
+		0 9px 26px color-mix(in srgb, var(--accent) 22%, transparent);
+	transition: background 180ms ease, box-shadow 220ms var(--motion-snap), scale 120ms ease;
+}
+
+.primary-control:hover {
+	background: linear-gradient(180deg, color-mix(in srgb, var(--accent-hover) 88%, white), var(--accent-hover));
+}
+
+.status-dot {
+	box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 10%, transparent), 0 0 16px currentColor;
+}
+
+.section-enter {
+	animation: section-enter 380ms var(--motion-settle) both;
+}
+
+@keyframes section-enter {
+	from {
+		opacity: 0;
+		transform: translateY(10px) scale(0.992);
+		filter: blur(3px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+		filter: blur(0);
+	}
+}
+
+@keyframes ambient-drift {
+	0%,
+	100% {
+		transform: translate3d(0, 0, 0) scale(1);
+	}
+	50% {
+		transform: translate3d(2%, -2%, 0) scale(1.06);
+	}
+}
+
+@keyframes launch-breathe {
+	from { opacity: 0.72; transform: scale(0.965); }
+	to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		scroll-behavior: auto !important;
+		transition-duration: 0.01ms !important;
+	}
+
+	button,
+	a {
+		scale: 1 !important;
+	}
+}
+
+@media (hover: hover) and (pointer: fine) {
+	.surface-card:hover,
+	.premium-card:hover {
+		border-color: var(--border-strong);
+		box-shadow: inset 0 1px 0 color-mix(in srgb, white 22%, transparent), var(--shadow-md);
+	}
+}
+
+@media (prefers-reduced-transparency: reduce) {
+	.glass,
+	.glass-dark,
+	.surface-card,
+	.premium-card,
+	.control {
+		background: var(--surface-solid) !important;
+		backdrop-filter: none !important;
+		-webkit-backdrop-filter: none !important;
+	}
+}
+
+@media (prefers-contrast: more) {
+	:root {
+		--border: color-mix(in srgb, currentColor 24%, transparent);
+		--border-strong: color-mix(in srgb, currentColor 42%, transparent);
+		--fg-subtle: color-mix(in srgb, var(--fg) 72%, transparent);
+	}
+
+	.glass,
+	.surface-card,
+	.premium-card,
+	.control {
+		background: var(--surface-solid);
+	}
 }

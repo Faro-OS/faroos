@@ -1,101 +1,134 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { getSection, setSection, type SectionId } from '$lib/section.svelte';
-	import { getTheme, toggleTheme } from '$lib/theme.svelte';
-	import logo from '$lib/assets/logo.png';
+	import appsIcon from '$lib/assets/dock/apps.png';
+	import containersIcon from '$lib/assets/dock/containers.png';
+	import filesIcon from '$lib/assets/dock/files.png';
+	import homeIcon from '$lib/assets/dock/home.png';
+	import serversIcon from '$lib/assets/dock/servers.png';
+	import settingsIcon from '$lib/assets/dock/settings.png';
+	import terminalIcon from '$lib/assets/dock/terminal.png';
+	import trashIcon from '$lib/assets/dock/trash.png';
 
-	type Item = { id: SectionId; label: string; icon: string };
-
-	const items: Item[] = [
-		{ id: 'dashboard', label: 'Home', icon: 'M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z' },
-		{ id: 'servers', label: 'Servers', icon: 'M4 6h16M4 12h16M4 18h16' },
-		{ id: 'containers', label: 'Containers', icon: 'M21 8 12 3 3 8m18 0-9 5m9-5v9l-9 5m0-9L3 8m9 5v9M3 8v9l9 5' },
-		{ id: 'storage', label: 'Storage', icon: 'M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Zm4 3h.01M8 14h.01' },
-		{ id: 'apps', label: 'App Store', icon: 'M12 3v18m9-9H3' },
-		{ id: 'terminal', label: 'Terminal', icon: 'm4 6 5 6-5 6m8 0h8' },
-		{ id: 'files', label: 'Files', icon: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z' },
-		{ id: 'settings', label: 'Settings', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7-3c0 .34-.02.67-.06 1l2.11 1.65-2 3.46-2.49-1a7.4 7.4 0 0 1-1.73 1L14.5 21h-5l-.33-2.89a7.4 7.4 0 0 1-1.73-1l-2.49 1-2-3.46L4.06 13A7.6 7.6 0 0 1 4 12c0-.34.02-.67.06-1L1.95 9.35l2-3.46 2.49 1c.53-.42 1.11-.76 1.73-1L8.5 3h5l.33 2.89c.62.24 1.2.58 1.73 1l2.49-1 2 3.46L17.94 11c.04.33.06.66.06 1Z' }
+	type DockItem = { id: SectionId | 'trash'; label: string; icon?: string };
+	const items: DockItem[] = [
+		{ id: 'dashboard', label: 'Home', icon: homeIcon },
+		{ id: 'files', label: 'Files', icon: filesIcon },
+		{ id: 'servers', label: 'Servers', icon: serversIcon },
+		{ id: 'containers', label: 'Docker', icon: containersIcon },
+		{ id: 'storage', label: 'Storage' },
+		{ id: 'apps', label: 'App Store', icon: appsIcon },
+		{ id: 'terminal', label: 'Terminal', icon: terminalIcon },
+		{ id: 'settings', label: 'Settings', icon: settingsIcon },
+		{ id: 'trash', label: 'Trash', icon: trashIcon }
 	];
 
-	const MAX_SCALE = 1.55;
-	const RADIUS = 110; // px of mouse influence on either side of an icon
-
+	const MAX_SCALE = 1.2;
+	const RADIUS = 100;
 	let buttons: (HTMLButtonElement | null)[] = $state([]);
-	let scales = $state<number[]>(items.map(() => 1));
+	let scales = $state(items.map(() => 1));
 	let hovered = $state<number | null>(null);
+	let settleFrame: number | null = null;
+	let settleTime = 0;
+	let velocities = items.map(() => 0);
 
-	function handleMouseMove(e: MouseEvent) {
-		scales = buttons.map((btn) => {
-			if (!btn) return 1;
-			const rect = btn.getBoundingClientRect();
-			const center = rect.left + rect.width / 2;
-			const dist = Math.abs(e.clientX - center);
-			if (dist > RADIUS) return 1;
-			return 1 + (1 - dist / RADIUS) * (MAX_SCALE - 1);
+	function stopSettle() {
+		if (settleFrame !== null) cancelAnimationFrame(settleFrame);
+		settleFrame = null;
+	}
+
+	function handlePointerMove(event: PointerEvent) {
+		if (window.innerWidth < 640 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		stopSettle();
+		velocities = items.map(() => 0);
+		scales = buttons.map((button) => {
+			if (!button) return 1;
+			const rect = button.getBoundingClientRect();
+			const distance = Math.abs(event.clientX - (rect.left + rect.width / 2));
+			return distance >= RADIUS ? 1 : 1 + (1 - distance / RADIUS) * (MAX_SCALE - 1);
 		});
 	}
 
-	function resetScales() {
-		scales = items.map(() => 1);
+	function reset() {
 		hovered = null;
+		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			stopSettle();
+			scales = items.map(() => 1);
+			return;
+		}
+		stopSettle();
+		settleTime = performance.now();
+		settleFrame = requestAnimationFrame(settleToRest);
 	}
+
+	// Critically damped spring: start from the live value, stay interruptible
+	// and settle without decorative bounce when the pointer leaves the dock.
+	function settleToRest(now: number) {
+		const dt = Math.min((now - settleTime) / 1000, 1 / 30);
+		settleTime = now;
+		let moving = false;
+		const nextScales = scales.map((current, index) => {
+			const acceleration = 170 * (1 - current) - 26 * velocities[index];
+			velocities[index] += acceleration * dt;
+			const next = current + velocities[index] * dt;
+			if (Math.abs(next - 1) > 0.001 || Math.abs(velocities[index]) > 0.005) moving = true;
+			return next;
+		});
+		scales = moving ? nextScales : items.map(() => 1);
+		if (moving) settleFrame = requestAnimationFrame(settleToRest);
+		else settleFrame = null;
+	}
+
+	function activate(item: DockItem) {
+		setSection(item.id === 'trash' ? 'files' : item.id);
+	}
+
+	onDestroy(stopSettle);
 </script>
 
-<nav
-	aria-label="FaroOS"
-	onmousemove={handleMouseMove}
-	onmouseleave={resetScales}
-	class="glass-dark fixed bottom-2 left-1/2 z-40 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-end gap-1 overflow-x-auto rounded-[24px] px-2 py-1.5 sm:bottom-4 sm:max-w-[calc(100vw-2rem)] sm:gap-1.5 sm:rounded-[28px] sm:px-2.5 sm:py-2"
->
-	<span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white p-1 shadow sm:h-11 sm:w-11 sm:rounded-2xl sm:p-1.5">
-		<img src={logo} alt="FaroOS" class="h-full w-full object-contain" />
-	</span>
-	<div class="mx-0.5 h-6 w-px shrink-0 self-center bg-white/15 sm:mx-1 sm:h-8"></div>
-
-	{#each items as item, i (item.id)}
-		<div class="relative flex shrink-0 flex-col items-center">
-			{#if hovered === i}
-				<span
-					class="glass-dark pointer-events-none absolute -top-10 hidden whitespace-nowrap rounded-xl px-2.5 py-1 text-xs font-medium text-white sm:block"
-				>
-					{item.label}
-				</span>
-			{/if}
+<nav class="apple-dock" aria-label="FaroOS navigation" onpointermove={handlePointerMove} onpointerleave={reset}>
+	{#each items as item, index (item.id)}
+		{#if index === 7 || index === 8}<span class="dock-separator" aria-hidden="true"></span>{/if}
+		<div class="dock-item">
+			{#if hovered === index}<span class="dock-tooltip">{item.label}</span>{/if}
 			<button
-				bind:this={buttons[i]}
+				bind:this={buttons[index]}
 				type="button"
 				aria-label={item.label}
-				onmouseenter={() => (hovered = i)}
+				aria-current={item.id !== 'trash' && getSection() === item.id ? 'page' : undefined}
+				onmouseenter={() => (hovered = index)}
 				onmouseleave={() => (hovered = null)}
-				onclick={() => setSection(item.id)}
-				style="transform: scale({scales[i]}) translateY({(scales[i] - 1) * -14}px);"
-				class="grid h-9 w-9 shrink-0 origin-bottom place-items-center rounded-xl transition-[background-color,color] duration-150 will-change-transform sm:h-11 sm:w-11 sm:rounded-2xl
-					{getSection() === item.id ? 'bg-white text-black' : 'bg-white/10 text-white/85 hover:bg-white/20 hover:text-white'}"
+				onclick={() => activate(item)}
+				style={`transform:scale(${scales[index]}) translateY(${(scales[index] - 1) * -16}px)`}
+				class:active={item.id !== 'trash' && getSection() === item.id}
+				class="dock-button"
 			>
-				<svg viewBox="0 0 24 24" class="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" stroke-width="2">
-					<path d={item.icon} stroke-linecap="round" stroke-linejoin="round" />
-				</svg>
+				{#if item.icon}
+					<img src={item.icon} alt="" draggable="false" />
+				{:else}
+					<svg class="storage-icon" viewBox="0 0 34 34"><defs><linearGradient id="disk-metal" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f2f3f4"/><stop offset="1" stop-color="#8d939b"/></linearGradient></defs><rect x="4" y="4" width="26" height="10" rx="4"/><rect x="4" y="19" width="26" height="10" rx="4"/><circle cx="25" cy="9" r="1.5"/><circle cx="25" cy="24" r="1.5"/></svg>
+				{/if}
+			{#if item.id !== 'trash' && getSection() === item.id}<i class="active-dot"></i>{/if}
 			</button>
-			<span class="mt-1 hidden h-1 w-1 rounded-full sm:block {getSection() === item.id ? 'bg-white' : 'bg-transparent'}"></span>
 		</div>
 	{/each}
-
-	<div class="mx-0.5 h-6 w-px shrink-0 self-center bg-white/15 sm:mx-1 sm:h-8"></div>
-	<button
-		type="button"
-		title="Toggle theme"
-		aria-label="Toggle theme"
-		onclick={toggleTheme}
-		class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/10 text-white/85 transition-colors hover:bg-white/20 hover:text-white sm:h-11 sm:w-11 sm:rounded-2xl"
-	>
-		{#if getTheme() === 'dark'}
-			<svg viewBox="0 0 24 24" class="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" stroke-width="2">
-				<circle cx="12" cy="12" r="4" />
-				<path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32 1.41-1.41" stroke-linecap="round" />
-			</svg>
-		{:else}
-			<svg viewBox="0 0 24 24" class="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" stroke-width="2">
-				<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke-linecap="round" stroke-linejoin="round" />
-			</svg>
-		{/if}
-	</button>
 </nav>
+
+<style>
+	.apple-dock { position: fixed; z-index: 50; bottom: max(16px, env(safe-area-inset-bottom)); left: 50%; width: min(742px, calc(100vw - 24px)); height: 88px; display: flex; align-items: center; justify-content: center; gap: 13px; padding: 11px 20px 10px; border: 1px solid var(--border-strong); border-radius: 32px; background: color-mix(in srgb, var(--chrome) 94%, transparent); box-shadow: inset 0 1px 0 color-mix(in srgb, white 42%, transparent), 0 28px 74px rgba(14,35,68,.22), 0 4px 14px rgba(12,18,28,.08); backdrop-filter: blur(40px) saturate(1.8); -webkit-backdrop-filter: blur(40px) saturate(1.8); transform: translateX(-50%); }
+	.dock-item { position: relative; display: flex; align-items: center; justify-content: center; }
+	.dock-button { position: relative; width: 52px; height: 52px; display: grid; flex: 0 0 auto; place-items: center; border: 0; border-radius: 15px; background: transparent; transform-origin: center bottom; transition: filter 180ms ease, scale 90ms ease; will-change: transform; }
+	.dock-button:hover { filter: brightness(1.04) saturate(1.04); }.dock-button:active { transition-duration: 75ms; }
+	.dock-button.active img,.dock-button.active .storage-icon { filter: drop-shadow(0 7px 10px color-mix(in srgb,var(--accent) 20%,rgba(20,25,35,.12))) brightness(1.035); }
+	.dock-button img { width: 52px; height: 52px; border-radius: 15px; object-fit: cover; user-select: none; -webkit-user-drag: none; filter: drop-shadow(0 5px 7px rgba(20,25,35,.13)); }
+	.dock-button .storage-icon { width: 46px; height: 46px; padding: 5px; overflow: visible; border-radius: 14px; background: color-mix(in srgb, var(--surface-solid) 92%, transparent); filter: drop-shadow(0 5px 6px rgba(20,25,35,.14)); }.dock-button .storage-icon rect { fill: url(#disk-metal); stroke: #737a83; stroke-width: 1; }.dock-button .storage-icon circle { fill: #30d158; }
+	.dock-separator { width: 1px; height: 42px; flex: 0 0 auto; margin: 0 -4px; background: var(--border-strong); }
+	.dock-tooltip { position: absolute; bottom: 66px; left: 50%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 9px; color: var(--fg); background: color-mix(in srgb, var(--surface-raised) 94%, transparent); box-shadow: var(--shadow-md); font-size: 10px; font-weight: 600; white-space: nowrap; transform: translateX(-50%); transform-origin: center bottom; animation: tooltip-in 150ms var(--motion-settle) both; backdrop-filter: blur(20px) saturate(1.4); }
+	.active-dot { position: absolute; bottom: -8px; left: 50%; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent),0 0 10px color-mix(in srgb,var(--accent) 42%,transparent); transform: translateX(-50%); }
+	@keyframes tooltip-in { from { opacity: 0; transform: translateX(-50%) translateY(4px) scale(.96); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
+	@media (max-width: 760px) { .apple-dock { width: min(680px,calc(100vw - 16px)); height: 74px; gap: 7px; padding: 9px 11px; border-radius: 28px; }.dock-button,.dock-button img { width: 43px; height: 43px; border-radius: 13px; }.dock-button .storage-icon { width: 41px; height: 41px; }.dock-separator { height: 36px; }.active-dot { bottom: -7px; } }
+	@media (max-width: 540px) { .apple-dock { height: 66px; justify-content: space-around; gap: 1px; padding-inline: 6px; border-radius: 24px; }.dock-button,.dock-button img { width: 35px; height: 35px; border-radius: 10px; }.dock-button .storage-icon { width: 34px; height: 34px; padding: 4px; border-radius: 10px; }.dock-separator { height: 30px; margin: 0 -1px; }.dock-tooltip { display:none; }.active-dot { bottom: -7px; width: 3px; height: 3px; } }
+	@media (prefers-reduced-motion: reduce) { .dock-button { transform: none !important; }.dock-tooltip { animation: none; } }
+	@media (prefers-reduced-transparency: reduce) { .apple-dock { background: var(--surface-solid); backdrop-filter: none; -webkit-backdrop-filter: none; } }
+	@media (prefers-contrast: more) { .apple-dock { border-color: var(--border-strong); background: var(--surface-solid); }.active-dot { background: var(--accent); } }
+</style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import AppIcon from './AppIcon.svelte';
 	import {
 		containerAction,
@@ -19,11 +20,13 @@
 
 	type PortRowStatus = 'idle' | 'checking' | 'free' | 'busy-own' | 'busy-other';
 
-	let ports = $state<AppPort[]>((app.ports ?? []).map((p) => ({ ...p })));
-	let env = $state<AppEnvVar[]>(app.env?.map((e) => ({ ...e, default: e.default })) ?? []);
-	let portStatus = $state<PortRowStatus[]>((app.ports ?? []).map(() => 'idle'));
-	let portContainer = $state<(string | undefined)[]>((app.ports ?? []).map(() => undefined));
-	let portContainerId = $state<(string | undefined)[]>((app.ports ?? []).map(() => undefined));
+	let ports = $state<AppPort[]>(untrack(() => (app.ports ?? []).map((p) => ({ ...p }))));
+	let env = $state<AppEnvVar[]>(untrack(() => app.env?.map((e) => ({ ...e, default: e.default })) ?? []));
+	let argumentsValue = $state(untrack(() => app.arguments ?? ''));
+	let argumentsRevealed = $state(false);
+	let portStatus = $state<PortRowStatus[]>(untrack(() => (app.ports ?? []).map(() => 'idle')));
+	let portContainer = $state<(string | undefined)[]>(untrack(() => (app.ports ?? []).map(() => undefined)));
+	let portContainerId = $state<(string | undefined)[]>(untrack(() => (app.ports ?? []).map(() => undefined)));
 	let freeing = $state<number | null>(null);
 	let revealed = $state(new Set<number>());
 	let deploying = $state(false);
@@ -94,6 +97,14 @@
 		revealed = next;
 	}
 
+	function argumentsContainSecret(): boolean {
+		return /token|password|secret|api.?key/i.test(argumentsValue);
+	}
+
+	function hasUnresolvedPlaceholder(): boolean {
+		return /YOUR_[A-Z0-9_]+(?:_HERE)?|CHANGE[_ -]?ME|<[^>]*(?:TOKEN|PASSWORD|SECRET|KEY)[^>]*>/i.test(argumentsValue);
+	}
+
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		error = null;
@@ -102,10 +113,14 @@
 			error = 'Resolve the port conflicts below before installing.';
 			return;
 		}
+		if (hasUnresolvedPlaceholder()) {
+			error = 'Replace the credential placeholder in Container arguments before installing.';
+			return;
+		}
 
 		deploying = true;
 		try {
-			await deployApp(nodeId, app.id, { ports, env });
+			await deployApp(nodeId, app.id, { ports, env, arguments: argumentsValue });
 			toastSuccess(`${app.name} deployed`);
 			onDeployed();
 		} catch (err) {
@@ -124,17 +139,16 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4 backdrop-blur-sm">
-	<div class="glass flex max-h-[85vh] w-full max-w-lg flex-col rounded-[28px]">
+<div class="install-layer fixed inset-0 z-[70] grid place-items-center p-4">
+	<button type="button" class="install-scrim absolute inset-0" aria-label="Close installer" onclick={onClose}></button>
+	<div class="install-panel glass relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-[28px]">
 		<div class="flex items-center gap-3 border-b border-[var(--border)] p-5">
 			<AppIcon name={app.name} icon={app.icon} size={48} />
 			<div class="min-w-0 flex-1">
 				<h2 class="truncate font-semibold text-[var(--fg)]">{app.name}</h2>
 				<p class="text-xs text-[var(--fg-subtle)]">{app.category ?? 'Other'}</p>
 			</div>
-			<button onclick={onClose} aria-label="Close" class="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--fg-subtle)] hover:bg-[var(--track)] hover:text-[var(--fg)]">
-				✕
-			</button>
+			<button onclick={onClose} aria-label="Close" class="control grid h-9 w-9 min-h-0 shrink-0 place-items-center rounded-xl text-[var(--fg-subtle)] hover:text-[var(--fg)]"><svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
 		</div>
 
 		<form id="install-app-form" onsubmit={handleSubmit} class="flex-1 overflow-y-auto p-5">
@@ -228,7 +242,35 @@
 				</section>
 			{/if}
 
-			{#if ports.length === 0 && env.length === 0}
+			{#if app.arguments}
+				<section class="mb-2 mt-6">
+					<h3 class="mb-1 text-sm font-semibold text-[var(--fg)]">Container arguments</h3>
+					<p class="mb-3 text-xs leading-5 text-[var(--fg-subtle)]">Passed directly to the app when it starts. Replace any credential placeholder supplied by the catalog.</p>
+					<div class="relative">
+						<input
+							type={argumentsContainSecret() && !argumentsRevealed ? 'password' : 'text'}
+							bind:value={argumentsValue}
+							spellcheck="false"
+							class="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 pr-10 font-mono text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+						/>
+						{#if argumentsContainSecret()}
+							<button
+								type="button"
+								onclick={() => (argumentsRevealed = !argumentsRevealed)}
+								class="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--fg-subtle)] hover:text-[var(--fg)]"
+								aria-label={argumentsRevealed ? 'Hide arguments' : 'Show arguments'}
+							>
+								{argumentsRevealed ? '◉' : '○'}
+							</button>
+						{/if}
+					</div>
+					{#if hasUnresolvedPlaceholder()}
+						<p class="mt-2 text-xs font-medium text-amber-600">A required credential still needs to be replaced.</p>
+					{/if}
+				</section>
+			{/if}
+
+			{#if ports.length === 0 && env.length === 0 && !app.arguments}
 				<p class="py-8 text-center text-sm text-[var(--fg-subtle)]">This app has no configurable ports or environment variables — it'll deploy with its defaults.</p>
 			{/if}
 
@@ -244,11 +286,21 @@
 			<button
 				type="submit"
 				form="install-app-form"
-				disabled={deploying || portStatus.some((s) => s === 'busy-own' || s === 'busy-other')}
-				class="rounded-xl bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-[var(--accent-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+				disabled={deploying || hasUnresolvedPlaceholder() || portStatus.some((s) => s === 'busy-own' || s === 'busy-other')}
+				class="primary-control rounded-xl px-5 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{deploying ? 'Installing…' : 'Install'}
 			</button>
 		</div>
 	</div>
 </div>
+
+<style>
+	.install-layer { perspective: 1000px; }
+	.install-scrim { border: 0; background: color-mix(in srgb,#07080b 42%,transparent); animation: installer-scrim 180ms ease-out both; backdrop-filter: blur(9px) saturate(.85); -webkit-backdrop-filter: blur(9px) saturate(.85); }
+	.install-panel { transform-origin: center 25%; animation: installer-in 340ms var(--motion-settle) both; }
+	@keyframes installer-scrim { from { opacity:0; } to { opacity:1; } }
+	@keyframes installer-in { from { opacity:0; transform:translateY(12px) scale(.97); filter:blur(7px); } to { opacity:1; transform:translateY(0) scale(1); filter:blur(0); } }
+	@media (prefers-reduced-motion: reduce) { .install-scrim,.install-panel { animation:none; } }
+	@media (prefers-reduced-transparency: reduce) { .install-scrim { backdrop-filter:none; -webkit-backdrop-filter:none; } }
+</style>

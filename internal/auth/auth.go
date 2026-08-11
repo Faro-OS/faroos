@@ -65,6 +65,45 @@ func (a *Auth) CreateAdmin(username, password string) error {
 	return err
 }
 
+// CreateAdminSession creates the one administrator and its first session in
+// the same transaction. Setup must never leave the UI claiming failure after
+// the account was committed but the session was not.
+func (a *Auth) CreateAdminSession(username, password string) (string, time.Time, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	token, err := randomHex(32)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	expiresAt := time.Now().Add(sessionTTL)
+
+	tx, err := a.db.Begin()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	defer tx.Rollback()
+
+	var count int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM admin`).Scan(&count); err != nil {
+		return "", time.Time{}, err
+	}
+	if count != 0 {
+		return "", time.Time{}, ErrAlreadySetUp
+	}
+	if _, err := tx.Exec(`INSERT INTO admin (id, username, password_hash) VALUES (1, ?, ?)`, username, string(hash)); err != nil {
+		return "", time.Time{}, err
+	}
+	if _, err := tx.Exec(`INSERT INTO sessions (token, expires_at) VALUES (?, ?)`, token, expiresAt.Format(time.RFC3339Nano)); err != nil {
+		return "", time.Time{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", time.Time{}, err
+	}
+	return token, expiresAt, nil
+}
+
 func (a *Auth) VerifyLogin(username, password string) error {
 	var hash string
 	var storedUsername string

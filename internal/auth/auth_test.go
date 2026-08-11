@@ -51,6 +51,51 @@ func TestSetupAndLoginFlow(t *testing.T) {
 	}
 }
 
+func TestCreateAdminSessionIsAtomic(t *testing.T) {
+	db := newTestDB(t)
+	a, err := New(db)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TRIGGER reject_first_session
+		BEFORE INSERT ON sessions
+		BEGIN
+			SELECT RAISE(ABORT, 'session insert rejected');
+		END
+	`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+
+	if _, _, err := a.CreateAdminSession("gonzalo", "correcthorsebattery"); err == nil {
+		t.Fatal("expected session creation to fail")
+	}
+	if !a.NeedsSetup() {
+		t.Fatal("administrator insert was not rolled back with the failed session")
+	}
+}
+
+func TestCreateAdminSessionReturnsValidSession(t *testing.T) {
+	a, err := New(newTestDB(t))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	token, expiresAt, err := a.CreateAdminSession("gonzalo", "correcthorsebattery")
+	if err != nil {
+		t.Fatalf("CreateAdminSession: %v", err)
+	}
+	if !expiresAt.After(time.Now()) {
+		t.Fatal("expected session expiry in the future")
+	}
+	if err := a.ValidateSession(token); err != nil {
+		t.Fatalf("new setup session is invalid: %v", err)
+	}
+	if err := a.VerifyLogin("gonzalo", "correcthorsebattery"); err != nil {
+		t.Fatalf("new administrator cannot log in: %v", err)
+	}
+}
+
 func TestVerifyLoginBeforeSetup(t *testing.T) {
 	a, err := New(newTestDB(t))
 	if err != nil {

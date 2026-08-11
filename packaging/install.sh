@@ -40,7 +40,7 @@ esac
 
 (( EUID == 0 )) || die "Run this installer as root (for example, pipe it to 'sudo bash')."
 
-for command_name in curl getent groupadd id install systemctl useradd usermod; do
+for command_name in awk curl getent groupadd id install sha256sum systemctl useradd usermod; do
   command -v "$command_name" >/dev/null 2>&1 || die "Required command not found: $command_name"
 done
 
@@ -56,14 +56,33 @@ fi
 
 asset_name="faroos-${component}-linux-${arch}"
 binary_url="https://github.com/${REPO}/releases/download/${release_tag}/${asset_name}"
+checksums_url="https://github.com/${REPO}/releases/download/${release_tag}/SHA256SUMS"
+updater_url="https://github.com/${REPO}/releases/download/${release_tag}/faroos-update"
 unit_name="faroos-${component}.service"
 unit_url="https://raw.githubusercontent.com/${REPO}/${release_tag}/packaging/systemd/${unit_name}"
+update_service_name="faroos-${component}-update.service"
+update_timer_name="faroos-${component}-update.timer"
+update_service_url="https://raw.githubusercontent.com/${REPO}/${release_tag}/packaging/systemd/${update_service_name}"
+update_timer_url="https://raw.githubusercontent.com/${REPO}/${release_tag}/packaging/systemd/${update_timer_name}"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 echo "Downloading FaroOS ${component} ${release_tag} for linux/${arch}..."
 curl -fL --retry 3 -o "${tmp_dir}/${asset_name}" "$binary_url" || die "Could not download ${binary_url}"
+curl -fL --retry 3 -o "${tmp_dir}/SHA256SUMS" "$checksums_url" || die "Could not download release checksums."
+curl -fL --retry 3 -o "${tmp_dir}/faroos-update" "$updater_url" || die "Could not download the automatic updater."
 curl -fL --retry 3 -o "${tmp_dir}/${unit_name}" "$unit_url" || die "Could not download ${unit_url}"
+curl -fL --retry 3 -o "${tmp_dir}/${update_service_name}" "$update_service_url" || die "Could not download the updater service."
+curl -fL --retry 3 -o "${tmp_dir}/${update_timer_name}" "$update_timer_url" || die "Could not download the updater timer."
+
+verify_release_file() {
+  local name="$1" path="$2" expected
+  expected="$(awk -v name="$name" '$2 == name || $2 == "*" name { print $1; exit }' "${tmp_dir}/SHA256SUMS")"
+  [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]] || die "Missing checksum for ${name}."
+  printf '%s  %s\n' "$expected" "$path" | sha256sum -c - >/dev/null || die "Checksum verification failed for ${name}."
+}
+verify_release_file "$asset_name" "${tmp_dir}/${asset_name}"
+verify_release_file "faroos-update" "${tmp_dir}/faroos-update"
 
 if ! getent group faroos >/dev/null; then
   groupadd --system faroos
@@ -80,10 +99,24 @@ if ! id -u faroos >/dev/null 2>&1; then
   useradd --system --gid faroos --home-dir /var/lib/faroos --create-home --shell "$nologin_shell" faroos
 fi
 
-install -d -m 0755 /etc/faroos /etc/systemd/system
+install -d -m 0755 /etc/faroos /etc/systemd/system /usr/local/libexec
 install -d -m 0755 -o faroos -g faroos /var/lib/faroos "/var/lib/faroos/${component}"
 install -m 0755 "${tmp_dir}/${asset_name}" "/usr/local/bin/faroos-${component}"
 install -m 0644 "${tmp_dir}/${unit_name}" "/etc/systemd/system/${unit_name}"
+install -m 0755 "${tmp_dir}/faroos-update" "/usr/local/libexec/faroos-${component}-update"
+install -m 0644 "${tmp_dir}/${update_service_name}" "/etc/systemd/system/${update_service_name}"
+install -m 0644 "${tmp_dir}/${update_timer_name}" "/etc/systemd/system/${update_timer_name}"
+
+if [[ "$component" == "server" ]]; then
+  install -d -m 0755 -o faroos -g faroos /var/lib/faroos/server/downloads
+  for agent_arch in amd64 arm64; do
+    cached_agent="faroos-agent-linux-${agent_arch}"
+    cached_agent_url="https://github.com/${REPO}/releases/download/${release_tag}/${cached_agent}"
+    curl -fL --retry 3 -o "${tmp_dir}/${cached_agent}" "$cached_agent_url" || die "Could not download ${cached_agent_url}"
+    verify_release_file "$cached_agent" "${tmp_dir}/${cached_agent}"
+    install -m 0755 -o faroos -g faroos "${tmp_dir}/${cached_agent}" "/var/lib/faroos/server/downloads/${cached_agent}"
+  done
+fi
 
 if getent group docker >/dev/null; then
   usermod -aG docker faroos
@@ -93,6 +126,7 @@ elif [[ "$component" == "agent" ]]; then
 fi
 
 systemctl daemon-reload
+systemctl enable --now "$update_timer_name"
 
 agent_env_is_configured() {
   [[ -f /etc/faroos/agent.env ]] &&

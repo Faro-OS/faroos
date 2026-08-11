@@ -17,6 +17,9 @@ export interface Stats {
 	diskUsedBytes: number;
 	diskTotalBytes: number;
 	disks?: Disk[];
+	networkInterface?: string;
+	networkReceiveMbps?: number;
+	networkTransmitMbps?: number;
 	uptimeSeconds: number;
 	timestamp: string;
 }
@@ -25,6 +28,7 @@ export interface Node {
 	id: string;
 	name: string;
 	connected: boolean;
+	transport?: 'direct-p2p' | 'relay';
 	pairedAt: string;
 	lastSeen: string;
 	stats: Stats;
@@ -34,6 +38,13 @@ export interface PairingResult {
 	id: string;
 	name: string;
 	token: string;
+	panelUrl?: string;
+}
+
+export interface RelayStatus {
+	enabled: boolean;
+	publicUrl: string;
+	p2p: boolean;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -47,7 +58,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 		await goto('/login');
 	}
 	if (!res.ok) {
-		throw new Error(`${init?.method ?? 'GET'} ${path} failed: ${res.status}`);
+		const detail = (await res.text().catch(() => '')).trim();
+		throw new Error(detail || `${init?.method ?? 'GET'} ${path} failed: ${res.status}`);
 	}
 	return res.json() as Promise<T>;
 }
@@ -84,6 +96,14 @@ export function createPairing(name: string): Promise<PairingResult> {
 	});
 }
 
+export function renewPairing(nodeId: string): Promise<PairingResult> {
+	return request<PairingResult>(`/api/nodes/${nodeId}/pairing`, { method: 'POST' });
+}
+
+export function relayStatus(): Promise<RelayStatus> {
+	return request<RelayStatus>('/api/relay/status');
+}
+
 export interface ContainerPort {
 	privatePort: number;
 	publicPort?: number;
@@ -118,7 +138,9 @@ export function containerLogs(nodeId: string, containerId: string, tail = 200): 
 export interface FileEntry {
 	name: string;
 	isDir: boolean;
+	isSymlink: boolean;
 	size: number;
+	mode: string;
 	modTime: string;
 }
 
@@ -130,15 +152,36 @@ export function fileDownloadUrl(nodeId: string, path: string): string {
 	return `${API_BASE}/api/nodes/${nodeId}/files/download?path=${encodeURIComponent(path)}`;
 }
 
-export async function uploadFile(nodeId: string, path: string, file: File): Promise<void> {
+export async function uploadFile(nodeId: string, path: string, file: Blob): Promise<void> {
 	const res = await fetch(`${API_BASE}/api/nodes/${nodeId}/files/upload?path=${encodeURIComponent(path)}`, {
 		method: 'POST',
 		credentials: 'include',
 		body: file
 	});
 	if (!res.ok) {
-		throw new Error(`upload failed: ${res.status}`);
+		const detail = (await res.text().catch(() => '')).trim();
+		throw new Error(detail || `upload failed: ${res.status}`);
 	}
+}
+
+export async function readFile(nodeId: string, path: string): Promise<string> {
+	const res = await fetch(fileDownloadUrl(nodeId, path), { credentials: 'include' });
+	if (!res.ok) {
+		const detail = (await res.text().catch(() => '')).trim();
+		throw new Error(detail || `read failed: ${res.status}`);
+	}
+	return res.text();
+}
+
+export function createDirectory(nodeId: string, path: string): Promise<{ ok: boolean }> {
+	return request(`/api/nodes/${nodeId}/files/directory?path=${encodeURIComponent(path)}`, { method: 'POST' });
+}
+
+export function renameFile(nodeId: string, from: string, to: string): Promise<{ ok: boolean }> {
+	return request(`/api/nodes/${nodeId}/files`, {
+		method: 'PATCH',
+		body: JSON.stringify({ from, to })
+	});
 }
 
 export function deleteFile(nodeId: string, path: string): Promise<{ ok: boolean }> {
@@ -173,6 +216,7 @@ export interface CatalogApp {
 	ports: AppPort[];
 	volumes: AppVolume[];
 	env?: AppEnvVar[];
+	arguments?: string;
 }
 
 export function listApps(): Promise<CatalogApp[]> {
@@ -190,6 +234,7 @@ export function refreshAppCatalog(): Promise<{ ok: boolean; count: number }> {
 export interface DeployOverrides {
 	ports: AppPort[];
 	env: AppEnvVar[];
+	arguments: string;
 }
 
 export function deployApp(nodeId: string, appId: string, overrides: DeployOverrides): Promise<{ ok: boolean }> {
@@ -213,6 +258,19 @@ export interface PortStatus {
 
 export function inspectPort(nodeId: string, port: number): Promise<PortStatus> {
 	return request(`/api/nodes/${nodeId}/ports/${port}`);
+}
+
+export interface InternetSpeedResult {
+	downloadMbps: number;
+	uploadMbps: number;
+	latencyMs: number;
+	testedAt: string;
+	provider: string;
+	server?: string;
+}
+
+export function runInternetSpeedTest(nodeId: string): Promise<InternetSpeedResult> {
+	return request(`/api/nodes/${nodeId}/speedtest`, { method: 'POST' });
 }
 
 export function terminalWsUrl(nodeId: string, cols: number, rows: number): string {

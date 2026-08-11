@@ -17,6 +17,7 @@ const (
 	TypePong          MessageType = "pong"
 	TypeCommand       MessageType = "command"        // server -> agent
 	TypeCommandResult MessageType = "command_result" // agent -> server
+	TypeP2PAnswer     MessageType = "p2p_answer"     // server -> agent, during connection setup
 
 	// Terminal messages implement a persistent PTY session multiplexed over
 	// the single agent websocket by SessionID — unlike Command/CommandResult
@@ -36,6 +37,7 @@ type Envelope struct {
 	Stats         *model.Stats   `json:"stats,omitempty"`
 	Command       *Command       `json:"command,omitempty"`
 	CommandResult *CommandResult `json:"commandResult,omitempty"`
+	P2PAnswer     *P2PAnswer     `json:"p2pAnswer,omitempty"`
 
 	TerminalOpen   *TerminalOpen   `json:"terminalOpen,omitempty"`
 	TerminalData   *TerminalData   `json:"terminalData,omitempty"`
@@ -72,9 +74,17 @@ type TerminalClose struct {
 // Hello is sent once by the agent right after connecting, identifying
 // itself and its pairing credentials.
 type Hello struct {
-	NodeID  string `json:"nodeId"`
-	Token   string `json:"token"`
-	Version string `json:"version"`
+	NodeID   string `json:"nodeId"`
+	Token    string `json:"token"`
+	Version  string `json:"version"`
+	P2POffer string `json:"p2pOffer,omitempty"`
+}
+
+// P2PAnswer completes the authenticated WebRTC negotiation. The SDP contains
+// DTLS fingerprints and ICE candidates, but never the node pairing token.
+type P2PAnswer struct {
+	SDP   string `json:"sdp,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 // Command is a request the server sends to a connected agent — e.g. "list

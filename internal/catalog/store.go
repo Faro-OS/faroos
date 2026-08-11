@@ -17,7 +17,12 @@ import (
 // change fast enough to need more than daily.
 const refreshInterval = 24 * time.Hour
 
+// Bump this when the imported cache schema gains data that cannot be
+// reconstructed from older cache files. Version 2 adds container arguments.
+const cacheVersion = 2
+
 type cacheFile struct {
+	Version   int              `json:"version"`
 	FetchedAt time.Time        `json:"fetchedAt"`
 	Apps      []appcatalog.App `json:"apps"`
 }
@@ -30,6 +35,7 @@ type Store struct {
 	mu        sync.RWMutex
 	imported  []appcatalog.App
 	fetchedAt time.Time
+	version   int
 	cachePath string
 }
 
@@ -54,13 +60,14 @@ func (s *Store) LoadCache() error {
 	s.mu.Lock()
 	s.imported = cf.Apps
 	s.fetchedAt = cf.FetchedAt
+	s.version = cf.Version
 	s.mu.Unlock()
 	return nil
 }
 
 func (s *Store) saveCache() error {
 	s.mu.RLock()
-	cf := cacheFile{FetchedAt: s.fetchedAt, Apps: s.imported}
+	cf := cacheFile{Version: cacheVersion, FetchedAt: s.fetchedAt, Apps: s.imported}
 	s.mu.RUnlock()
 
 	data, err := json.Marshal(cf)
@@ -84,7 +91,7 @@ func (s *Store) saveCache() error {
 func (s *Store) NeedsRefresh() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return len(s.imported) == 0 || time.Since(s.fetchedAt) > refreshInterval
+	return len(s.imported) == 0 || s.version != cacheVersion || time.Since(s.fetchedAt) > refreshInterval
 }
 
 // Refresh fetches the latest Unraid CA catalog and replaces the imported
@@ -98,6 +105,7 @@ func (s *Store) Refresh(ctx context.Context) error {
 	s.mu.Lock()
 	s.imported = apps
 	s.fetchedAt = time.Now()
+	s.version = cacheVersion
 	s.mu.Unlock()
 
 	if err := s.saveCache(); err != nil {
